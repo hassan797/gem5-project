@@ -564,7 +564,13 @@ decode QUADRANT default Unknown::unknown() {
                 }
             }
         }
-
+        0x02: decode FUNCT3 {
+            0x0: decode FUNCT7 { 0x01: xcop_srca; }
+            0x1: decode FUNCT7 { 0x01: xcop_srcb; }
+            0x2: decode FUNCT7 { 0x01: xcop_dst;  }
+            0x3: decode FUNCT7 { 0x01: xcop_len;  }
+            0x4: decode FUNCT7 { 0x01: xcop_kick; }
+            }
         0x01: decode FUNCT3 {
             format Load {
                 0x1: flh({{

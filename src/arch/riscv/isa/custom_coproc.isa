@@ -1,0 +1,43 @@
+# Custom RISC‑V instructions → write coproc MMIO regs via normal memory path.
+# opcode = CUSTOM_0 (0x0B) → OPCODE5 slot = 0x02 (0x0B >> 2)
+# funct7 = 0x01; funct3 picks the target reg.
+
+let COPROC_BASE  = 0x0000000040000000ULL;
+let REG_SRCA_OFF = 0x00ULL;
+let REG_SRCB_OFF = 0x08ULL;
+let REG_DST_OFF  = 0x10ULL;
+let REG_LEN_OFF  = 0x18ULL;
+let REG_CMD_OFF  = 0x20ULL;
+# All instructions are X(rs1) → 64‑bit store to BASE+offset.
+def template xcop_store(addr_off) {
+    exec {{
+        EA = rvZext((Addr)(COPROC_BASE + (addr_off)));
+        Mem = (uint64_t)Rs1;  // 64-bit write
+    }}, inst_flags=MemWriteOp;
+}
+# Start writes a literal 1 (no rs1 dep).
+def template xcop_start() {
+    exec {{
+        EA = rvZext((Addr)(COPROC_BASE + REG_CMD_OFF));
+        Mem = (uint64_t)1;
+    }}, inst_flags=MemWriteOp;
+}
+# Decoder hook (inside 0x3: decode OPCODE5 { … } add an entry for 0x02)
+# Example splice (do not duplicate if 0x02 already exists—merge inside it):
+#
+# 0x02: decode FUNCT3 {
+#   0x0: decode FUNCT7 { 0x01: xcop_srca; }
+#   0x1: decode FUNCT7 { 0x01: xcop_srcb; }
+#   0x2: decode FUNCT7 { 0x01: xcop_dst;  }
+#   0x3: decode FUNCT7 { 0x01: xcop_len;  }
+#   0x4: decode FUNCT7 { 0x01: xcop_kick; }
+# }
+
+# Leaf templates used above
+def template xcop_srca()  { xcop_store(REG_SRCA_OFF); }
+def template xcop_srcb()  { xcop_store(REG_SRCB_OFF); }
+def template xcop_dst()   { xcop_store(REG_DST_OFF); }
+def template xcop_len()   { xcop_store(REG_LEN_OFF); }
+def template xcop_kick()  { xcop_start(); }
+
+

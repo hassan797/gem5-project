@@ -56,5 +56,8 @@ namespace RiscvISA;
 //Include the definitions for the instruction formats
 ##include "formats/formats.isa"
 
+##include "custom_coproc.isa"
 //Include the decoder definition
 ##include "decoder.isa"
+
+

@@ -1,0 +1,5 @@
+Import('*')
+
+SimObject('SimpleCoprocessor.py', sim_objects=['SimpleCoprocessor'])
+Source('SimpleCoprocessor.cc')
+

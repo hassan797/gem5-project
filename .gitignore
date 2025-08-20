@@ -36,3 +36,17 @@ configs/dram/lowp_sweep.cfg
 .vscode
 typings
 .DS_Store
+build/
+*.o
+*.so
+*.pyc
+*.log
+*.out
+*.swp
+*.tmp
+*.bin
+*.exe
+.idea/
+.vscode/
+*.ipynb_checkpoints
+__pycache__/
