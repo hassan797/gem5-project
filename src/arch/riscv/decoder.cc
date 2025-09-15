@@ -172,4 +172,4 @@ Decoder::decode(PCStateBase &_next_pc)
 }
 
 } // namespace RiscvISA
-} // namespace gem5
+} 
