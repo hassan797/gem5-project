@@ -1,5 +1,5 @@
-# Custom RISC‑V instructions → write coproc MMIO regs via normal memory path.
-# opcode = CUSTOM_0 (0x0B) → OPCODE5 slot = 0x02 (0x0B >> 2)
+# Custom RISC-V instructions -> write coproc MMIO regs via normal memory path.
+# opcode = CUSTOM_0 (0x0B) -> OPCODE5 slot = 0x02 (0x0B >> 2)
 # funct7 = 0x01; funct3 picks the target reg.
 
 let COPROC_BASE  = 0x0000000040000000ULL;
@@ -8,7 +8,7 @@ let REG_SRCB_OFF = 0x08ULL;
 let REG_DST_OFF  = 0x10ULL;
 let REG_LEN_OFF  = 0x18ULL;
 let REG_CMD_OFF  = 0x20ULL;
-# All instructions are X(rs1) → 64‑bit store to BASE+offset.
+# All instructions are X(rs1) -> 64-bit store to BASE+offset.
 def template xcop_store(addr_off) {
     exec {{
         EA = rvZext((Addr)(COPROC_BASE + (addr_off)));
@@ -22,8 +22,8 @@ def template xcop_start() {
         Mem = (uint64_t)1;
     }}, inst_flags=MemWriteOp;
 }
-# Decoder hook (inside 0x3: decode OPCODE5 { … } add an entry for 0x02)
-# Example splice (do not duplicate if 0x02 already exists—merge inside it):
+# Decoder hook (inside 0x3: decode OPCODE5 { ... } add an entry for 0x02)
+# Example splice (do not duplicate if 0x02 already exists - merge inside it):
 #
 # 0x02: decode FUNCT3 {
 #   0x0: decode FUNCT7 { 0x01: xcop_srca; }
