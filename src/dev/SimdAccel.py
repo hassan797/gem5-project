@@ -1,12 +1,18 @@
-from m5.objects import SimdAccel
+import os
+import sys
+import importlib.util
 
-# This file is a small wrapper so the build system (SCons) can find
-# the SimObject at src/dev/SimdAccel.py as expected by src/dev/SConscript.
-# The real class implementation lives in src/python/m5/objects/SimdAccel.py
+# Path to the real SimObject implementation file (adjust relative path if needed)
+_here = os.path.dirname(__file__)
+_impl_path = os.path.normpath(os.path.join(_here, '..', 'python', 'm5', 'objects', 'SimdAccel.py'))
 
-# Expose the generated params object at module level so the
-# sim-object parameter generator can find it.
-_params = SimdAccel._params
+_spec = importlib.util.spec_from_file_location("m5.objects._SimdAccel_impl", _impl_path)
+_module = importlib.util.module_from_spec(_spec)
+sys.modules[_spec.name] = _module
+_spec.loader.exec_module(_module)
 
-# optional export list
+# Expose the SimObject class and its generated params to SCons
+SimdAccel = getattr(_module, "SimdAccel")
+_params = getattr(SimdAccel, "_params")
+
 __all__ = ["SimdAccel", "_params"]
