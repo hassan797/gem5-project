@@ -1,7 +1,8 @@
-from m5.objects import BasicPioDevice, DmaDevice, Param, Addr, Parent, System
+from m5.objects import BasicPioDevice, Param, Addr, Parent, System
+from m5.params import RequestPort, OptionalParam
 
 
-class SimdAccel(BasicPioDevice, DmaDevice):
+class SimdAccel(BasicPioDevice):
     type = 'SimdAccel'
     cxx_header = 'dev/simd_accel.hh'
     cxx_class = 'gem5::SimdAccel'
@@ -10,8 +11,18 @@ class SimdAccel(BasicPioDevice, DmaDevice):
     pio_addr = Param.Addr(0x40000000, "Base PIO address for the SIMD accelerator")
     pio_size = Param.Addr(0x100, "PIO region size")
 
-    # DmaDevice needs the system to get a DMA port
-    system = Param.System(Parent.any, "system")
+    # C++ extra base: make the generated C++ class inherit DmaDevice too
+    # (avoid Python multiple-inheritance of SimObjects)
+    cxx_extra_bases = ["gem5::DmaDevice"]
+
+    # DMA port and optional identifiers (mirrors DmaDevice's params)
+    dma = RequestPort("DMA port")
+    sid = OptionalParam.Unsigned(
+        "Stream identifier used by an IOMMU to distinguish amongst several devices attached to it",
+    )
+    ssid = OptionalParam.Unsigned(
+        "Substream identifier used by an IOMMU to distinguish amongst several devices attached to it",
+    )
 
     # Optional modeling params
     numLanes = Param.Unsigned(1, "Number of SIMD lanes (for modeling)")
