@@ -16,8 +16,8 @@
 namespace gem5 {
 
 SimdAccel::SimdAccel(const SimdAccelParams &p)
-    : BasicPioDevice(p, p.pio_size),
-      DmaDevice(p),
+        : BasicPioDevice(p, p.pio_size),
+            DmaDevice(p),
       evReadADone([this]{ onReadADone(); }, BasicPioDevice::name()+".readA"),
       evReadBDone([this]{ onReadBDone(); }, BasicPioDevice::name()+".readB"),
       evWriteDone([this]{ onWriteDone(); }, BasicPioDevice::name()+".write")
@@ -132,6 +132,15 @@ void
 SimdAccel::nextOrDone()
 {
     regStatus &= ~0x1ULL; // not busy
+}
+
+AddrRangeList
+SimdAccel::getAddrRanges() const
+{
+    // Let BasicPioDevice compute the ranges from pioAddr/pioSize.
+    // This is the v25 style: BasicPioDevice provides the implementation
+    // but we must declare the override here to satisfy the vtable.
+    return BasicPioDevice::getAddrRanges();
 }
 
 SimdAccel*

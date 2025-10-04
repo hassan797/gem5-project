@@ -19,6 +19,7 @@ class SimdAccel : public BasicPioDevice, public DmaDevice
     void init() override;
     Tick read(PacketPtr pkt) override;   // MMIO
     Tick write(PacketPtr pkt) override;  // MMIO
+  AddrRangeList getAddrRanges() const override;
 
   private:
     // MMIO regs (64-bit)

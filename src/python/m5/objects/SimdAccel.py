@@ -15,8 +15,12 @@ class SimdAccel(BasicPioDevice):
 
     # DMA port and optional identifiers (mirror DmaDevice)
     dma = RequestPort("DMA port")
-    sid = OptionalParam.Unsigned("Stream identifier used by an IOMMU")
-    ssid = OptionalParam.Unsigned("Substream identifier used by an IOMMU")
+    sid = OptionalParam.Unsigned(
+        "Stream identifier used by an IOMMU to distinguish amongst several devices attached to it",
+    )
+    ssid = OptionalParam.Unsigned(
+        "Substream identifier used by an IOMMU to distinguish amongst several devices attached to it",
+    )
 
     # Optional modeling params
     numLanes = Param.Unsigned(1, "Number of SIMD lanes (for modeling)")
