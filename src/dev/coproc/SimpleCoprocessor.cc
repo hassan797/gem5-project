@@ -132,11 +132,4 @@ SimpleCoprocessor::getAddrRanges() const
 }
 
 
-SimpleCoprocessor*
-SimpleCoprocessorParams::create() const
-{
-    return new SimpleCoprocessor(*this);
-}
-
-
 } // namespace gem5

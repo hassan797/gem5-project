@@ -143,10 +143,5 @@ SimdAccel::getAddrRanges() const
     return BasicPioDevice::getAddrRanges();
 }
 
-SimdAccel*
-SimdAccelParams::create() const
-{
-    return new SimdAccel(*this);
-}
 
 } // namespace gem5
