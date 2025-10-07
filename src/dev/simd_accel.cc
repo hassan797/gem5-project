@@ -17,7 +17,7 @@ namespace gem5 {
 
 SimdAccel::SimdAccel(const SimdAccelParams &p)
         : BasicPioDevice(p, p.pio_size),
-            DmaDevice(p),
+            DmaDevice(reinterpret_cast<const DmaDevice::Params&>(p)),
       evReadADone([this]{ onReadADone(); }, BasicPioDevice::name()+".readA"),
       evReadBDone([this]{ onReadBDone(); }, BasicPioDevice::name()+".readB"),
       evWriteDone([this]{ onWriteDone(); }, BasicPioDevice::name()+".write")

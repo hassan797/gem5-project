@@ -564,13 +564,45 @@ decode QUADRANT default Unknown::unknown() {
                 }
             }
         }
+
+
+
+
         0x02: decode FUNCT3 {
-            0x0: decode FUNCT7 { 0x01: xcop_srca; }
-            0x1: decode FUNCT7 { 0x01: xcop_srcb; }
-            0x2: decode FUNCT7 { 0x01: xcop_dst;  }
-            0x3: decode FUNCT7 { 0x01: xcop_len;  }
-            0x4: decode FUNCT7 { 0x01: xcop_kick; }
+            // Custom coprocessor register writes
+            format Store {
+                // Write SRC A pointer (value in Rs1) to MMIO base + 0x00
+                0x0: decode FUNCT7 { 0x01: xcop_srca({{
+                    EA  = rvZext(0x0000000040000000ULL + 0x00);
+                    Mem = Rs1;
+                }}, inst_flags=MemWriteOp); }
+
+                // Write SRC B pointer
+                0x1: decode FUNCT7 { 0x01: xcop_srcb({{
+                    EA  = rvZext(0x0000000040000000ULL + 0x08);
+                    Mem = Rs1;
+                }}, inst_flags=MemWriteOp); }
+
+                // Write DST pointer
+                0x2: decode FUNCT7 { 0x01: xcop_dst({{
+                    EA  = rvZext(0x0000000040000000ULL + 0x10);
+                    Mem = Rs1;
+                }}, inst_flags=MemWriteOp); }
+
+                // Write LEN (element count)
+                0x3: decode FUNCT7 { 0x01: xcop_len({{
+                    EA  = rvZext(0x0000000040000000ULL + 0x18);
+                    Mem = Rs1;
+                }}, inst_flags=MemWriteOp); }
+
+                // Kick: write literal 1 (ignores Rs1)
+                0x4: decode FUNCT7 { 0x01: xcop_kick({{
+                    EA  = rvZext(0x0000000040000000ULL + 0x20);
+                    Mem = 1ULL;
+                }}, inst_flags=MemWriteOp); }
             }
+        }
+
         0x01: decode FUNCT3 {
             format Load {
                 0x1: flh({{

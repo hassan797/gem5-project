@@ -12,8 +12,8 @@ namespace gem5 {
 
 SimpleCoprocessor::SimpleCoprocessor(const SimpleCoprocessorParams &p)
     // v25: BasicPioDevice takes (p, size). Address comes from params.
-    : BasicPioDevice(p, p.pio_size),
-      DmaDevice(p),
+        : BasicPioDevice(p, p.pio_size),
+            DmaDevice(reinterpret_cast<const DmaDevice::Params&>(p)),
       // Disambiguate name() due to MI
       evReadADone([this]{ onReadADone(); }, BasicPioDevice::name()+".readA"),
       evReadBDone([this]{ onReadBDone(); }, BasicPioDevice::name()+".readB"),
@@ -125,6 +125,12 @@ void SimpleCoprocessor::nextOrDone()
     regStatus &= ~0x1ULL; // not busy
 }
 
+AddrRangeList
+SimpleCoprocessor::getAddrRanges() const
+{
+    return BasicPioDevice::getAddrRanges();
+}
+
 
 SimpleCoprocessor*
 SimpleCoprocessorParams::create() const
@@ -134,4 +140,3 @@ SimpleCoprocessorParams::create() const
 
 
 } // namespace gem5
-

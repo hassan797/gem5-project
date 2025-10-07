@@ -16,6 +16,8 @@ class SimpleCoprocessor : public BasicPioDevice, public DmaDevice
   public:
     SimpleCoprocessor(const SimpleCoprocessorParams &p);
 
+    AddrRangeList getAddrRanges() const override;
+
     void init() override;
     Tick read(PacketPtr pkt) override;   // MMIO
     Tick write(PacketPtr pkt) override;  // MMIO
@@ -58,4 +60,3 @@ class SimpleCoprocessor : public BasicPioDevice, public DmaDevice
 
 } // namespace gem5
 #endif
-
