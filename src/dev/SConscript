@@ -34,6 +34,10 @@ Source('io_device.cc')
 Source('isa_fake.cc')
 Source('dma_device.cc')
 Source('dma_virt_device.cc')
+Source('simd_accel.cc')
+
+# Register the new SimdAccel SimObject so params headers are generated
+SimObject('SimdAccel.py', sim_objects=['SimdAccel'])
 
 SimObject('IntPin.py', sim_objects=[])
 SimObject('ResetPort.py', sim_objects=[])

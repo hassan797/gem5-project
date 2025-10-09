@@ -1,28 +1,25 @@
-#ifndef __DEV_COPROC_SIMPLE_COPROCESSOR_HH__
-#define __DEV_COPROC_SIMPLE_COPROCESSOR_HH__
+#ifndef __DEV_SIMD_ACCEL_HH__
+#define __DEV_SIMD_ACCEL_HH__
 
 #include <array>
 
 #include "base/types.hh"
 #include "dev/dma_device.hh"
 #include "dev/io_device.hh"
-#include "params/SimpleCoprocessor.hh"
+#include "params/SimdAccel.hh"
 #include "sim/eventq.hh"
 
 namespace gem5 {
 
-class SimpleCoprocessor : public BasicPioDevice, public DmaDevice
+class SimdAccel : public BasicPioDevice, public DmaDevice
 {
   public:
-    SimpleCoprocessor(const SimpleCoprocessorParams &p);
-
-    AddrRangeList getAddrRanges() const override;
+    SimdAccel(const SimdAccelParams &p);
 
     void init() override;
     Tick read(PacketPtr pkt) override;   // MMIO
     Tick write(PacketPtr pkt) override;  // MMIO
-
-    // Do NOT override getAddrRanges() in v25; BasicPioDevice handles it.
+  AddrRangeList getAddrRanges() const override;
 
   private:
     // MMIO regs (64-bit)
@@ -37,7 +34,7 @@ class SimpleCoprocessor : public BasicPioDevice, public DmaDevice
     uint64_t idx = 0;
     uint64_t tmpA = 0, tmpB = 0, tmpR = 0;
 
-    // DMA buffers
+    // DMA buffers (per-element)
     std::array<uint8_t, 8> bufA{};
     std::array<uint8_t, 8> bufB{};
     std::array<uint8_t, 8> bufR{};
@@ -59,4 +56,5 @@ class SimpleCoprocessor : public BasicPioDevice, public DmaDevice
 };
 
 } // namespace gem5
-#endif
+
+#endif // __DEV_SIMD_ACCEL_HH__

@@ -1,32 +1,37 @@
-#include "dev/coproc/SimpleCoprocessor.hh"
+/*
+ * SIMD accelerator: element-wise multiply using DMA. Matches the
+ * SimpleCoprocessor pattern (BasicPioDevice + DmaDevice, EventFunctionWrapper
+ * callbacks, per-element DMA operations).
+ */
+
+#include "dev/simd_accel.hh"
 
 #include <cstring>
 
 #include "base/trace.hh"
-
 #include "mem/packet.hh"
 #include "mem/packet_access.hh"
 #include "sim/system.hh"
 
 namespace gem5 {
 
-SimpleCoprocessor::SimpleCoprocessor(const SimpleCoprocessorParams &p)
-    // v25: BasicPioDevice takes (p, size). Address comes from params.
+SimdAccel::SimdAccel(const SimdAccelParams &p)
         : BasicPioDevice(p, p.pio_size),
             DmaDevice(reinterpret_cast<const DmaDevice::Params&>(p)),
-      // Disambiguate name() due to MI
       evReadADone([this]{ onReadADone(); }, BasicPioDevice::name()+".readA"),
       evReadBDone([this]{ onReadBDone(); }, BasicPioDevice::name()+".readB"),
       evWriteDone([this]{ onWriteDone(); }, BasicPioDevice::name()+".write")
 { }
 
-void SimpleCoprocessor::init()
+void
+SimdAccel::init()
 {
     BasicPioDevice::init();
+    DmaDevice::init();
 }
 
-// MMIO reads
-Tick SimpleCoprocessor::read(PacketPtr pkt)
+Tick
+SimdAccel::read(PacketPtr pkt)
 {
     const Addr off = pkt->getAddr() - pioAddr;
     uint64_t val = 0;
@@ -40,17 +45,15 @@ Tick SimpleCoprocessor::read(PacketPtr pkt)
       default:   val = 0; break;
     }
 
-    // v25 API: pass ByteOrder, not size
     pkt->setUintX(val, ByteOrder::little);
     pkt->makeResponse();
     return pioDelay;
 }
 
-// MMIO writes
-Tick SimpleCoprocessor::write(PacketPtr pkt)
+Tick
+SimdAccel::write(PacketPtr pkt)
 {
     const Addr off = pkt->getAddr() - pioAddr;
-    // v25 API: pass ByteOrder
     const uint64_t val = pkt->getUintX(ByteOrder::little);
 
     switch (off) {
@@ -58,14 +61,15 @@ Tick SimpleCoprocessor::write(PacketPtr pkt)
       case 0x08: regSrcB = val; break;
       case 0x10: regDst  = val; break;
       case 0x18: regLen  = val; break;
-      case 0x20: regCmd  = val; kick(); break;   // start
+      case 0x20: regCmd  = val; kick(); break;
       default: break;
     }
     pkt->makeResponse();
     return pioDelay;
 }
 
-void SimpleCoprocessor::kick()
+void
+SimdAccel::kick()
 {
     if (!(regCmd & 0x1) || regLen == 0)
         return;
@@ -76,28 +80,30 @@ void SimpleCoprocessor::kick()
     issueReadA();
 }
 
-void SimpleCoprocessor::issueReadA()
+void
+SimdAccel::issueReadA()
 {
     if (idx >= regLen) { nextOrDone(); return; }
     const Addr a = regSrcA + idx * 8;
-
-    // v25 DMA API: (Addr, size, Event*, uint8_t*, [opts], delay)
     dmaRead(a, /*size*/8, &evReadADone, bufA.data());
 }
 
-void SimpleCoprocessor::onReadADone()
+void
+SimdAccel::onReadADone()
 {
     std::memcpy(&tmpA, bufA.data(), 8);
     issueReadB();
 }
 
-void SimpleCoprocessor::issueReadB()
+void
+SimdAccel::issueReadB()
 {
     const Addr b = regSrcB + idx * 8;
     dmaRead(b, /*size*/8, &evReadBDone, bufB.data());
 }
 
-void SimpleCoprocessor::onReadBDone()
+void
+SimdAccel::onReadBDone()
 {
     std::memcpy(&tmpB, bufB.data(), 8);
     tmpR = tmpA * tmpB;                 // core math
@@ -105,13 +111,15 @@ void SimpleCoprocessor::onReadBDone()
     issueWrite();
 }
 
-void SimpleCoprocessor::issueWrite()
+void
+SimdAccel::issueWrite()
 {
     const Addr d = regDst + idx * 8;
     dmaWrite(d, /*size*/8, &evWriteDone, bufR.data());
 }
 
-void SimpleCoprocessor::onWriteDone()
+void
+SimdAccel::onWriteDone()
 {
     idx++;
     if (idx < regLen)
@@ -120,14 +128,18 @@ void SimpleCoprocessor::onWriteDone()
         nextOrDone();
 }
 
-void SimpleCoprocessor::nextOrDone()
+void
+SimdAccel::nextOrDone()
 {
     regStatus &= ~0x1ULL; // not busy
 }
 
 AddrRangeList
-SimpleCoprocessor::getAddrRanges() const
+SimdAccel::getAddrRanges() const
 {
+    // Let BasicPioDevice compute the ranges from pioAddr/pioSize.
+    // This is the v25 style: BasicPioDevice provides the implementation
+    // but we must declare the override here to satisfy the vtable.
     return BasicPioDevice::getAddrRanges();
 }
 
