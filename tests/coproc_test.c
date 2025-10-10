@@ -1,7 +1,5 @@
 // tests/coproc_test.c
 #include <stdint.h>
-#include <stdio.h>
-#include <inttypes.h>
 
 static inline void xcop_srca(uint64_t a){
     asm volatile(".insn r 0x0B,0x0,0x01, x0,%0,x0" :: "r"(a) : "memory");
@@ -47,5 +45,19 @@ int main(void)
         if (C[i] != exp) { ok = 0; break; }
     }
     return ok ? 0 : 1;
+}
+
+
+// Minimal exit and entry point for freestanding build (-nostdlib)
+static inline void do_exit(int code){
+    register long a0 asm("a0") = code;
+    register long a7 asm("a7") = 93; // SYS_exit for RISC-V Linux ABI; gem5 SE catches this
+    asm volatile("ecall" : : "r"(a0), "r"(a7) : "memory");
+    while (1) { }
+}
+
+void _start(void){
+    int r = main();
+    do_exit(r);
 }
 

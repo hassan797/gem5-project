@@ -16,17 +16,18 @@
 namespace gem5 {
 
 SimdAccel::SimdAccel(const SimdAccelParams &p)
-        : BasicPioDevice(p, p.pio_size),
-            DmaDevice(reinterpret_cast<const DmaDevice::Params&>(p)),
-      evReadADone([this]{ onReadADone(); }, BasicPioDevice::name()+".readA"),
-      evReadBDone([this]{ onReadBDone(); }, BasicPioDevice::name()+".readB"),
-      evWriteDone([this]{ onWriteDone(); }, BasicPioDevice::name()+".write")
+        : DmaDevice(static_cast<const DmaDevice::Params&>(p)),
+      pioAddr(p.pio_addr),
+      pioSize(p.pio_size),
+      pioDelay(p.pio_latency),
+      evReadADone([this]{ onReadADone(); }, name()+".readA"),
+      evReadBDone([this]{ onReadBDone(); }, name()+".readB"),
+      evWriteDone([this]{ onWriteDone(); }, name()+".write")
 { }
 
 void
 SimdAccel::init()
 {
-    BasicPioDevice::init();
     DmaDevice::init();
 }
 
@@ -137,10 +138,10 @@ SimdAccel::nextOrDone()
 AddrRangeList
 SimdAccel::getAddrRanges() const
 {
-    // Let BasicPioDevice compute the ranges from pioAddr/pioSize.
-    // This is the v25 style: BasicPioDevice provides the implementation
-    // but we must declare the override here to satisfy the vtable.
-    return BasicPioDevice::getAddrRanges();
+    // Return the address range for this PIO device
+    AddrRangeList ranges;
+    ranges.push_back(AddrRange(pioAddr, pioAddr + pioSize));
+    return ranges;
 }
 
 

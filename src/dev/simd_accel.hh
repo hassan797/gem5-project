@@ -11,7 +11,7 @@
 
 namespace gem5 {
 
-class SimdAccel : public BasicPioDevice, public DmaDevice
+class SimdAccel : public DmaDevice
 {
   public:
     SimdAccel(const SimdAccelParams &p);
@@ -22,6 +22,11 @@ class SimdAccel : public BasicPioDevice, public DmaDevice
   AddrRangeList getAddrRanges() const override;
 
   private:
+    // PIO parameters (since we don't inherit BasicPioDevice)
+    Addr pioAddr;
+    Addr pioSize;
+    Tick pioDelay;
+
     // MMIO regs (64-bit)
     Addr     regSrcA   = 0;
     Addr     regSrcB   = 0;

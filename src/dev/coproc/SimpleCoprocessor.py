@@ -12,7 +12,7 @@ class SimpleCoprocessor(BasicPioDevice):
     pio_size = Param.Addr(0x1000, "PIO size")
 
     # Keep the C++ inheritance behavior: add DmaDevice as an extra C++ base
-    cxx_extra_bases = ["gem5::DmaDevice"]
+    # Avoid declaring extra C++ bases in Python binding; rely on C++ MI only.
 
     # DMA port and optional identifiers (mirror DmaDevice)
     dma = RequestPort("DMA port")
