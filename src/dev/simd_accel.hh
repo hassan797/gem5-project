@@ -4,14 +4,14 @@
 #include <array>
 
 #include "base/types.hh"
-#include "dev/dma_device.hh"
+#include "dev/dma_virt_device.hh"
 #include "dev/io_device.hh"
 #include "params/SimdAccel.hh"
 #include "sim/eventq.hh"
 
 namespace gem5 {
 
-class SimdAccel : public DmaDevice
+class SimdAccel : public DmaVirtDevice
 {
   public:
     SimdAccel(const SimdAccelParams &p);
@@ -19,7 +19,8 @@ class SimdAccel : public DmaDevice
     void init() override;
     Tick read(PacketPtr pkt) override;   // MMIO
     Tick write(PacketPtr pkt) override;  // MMIO
-  AddrRangeList getAddrRanges() const override;
+    AddrRangeList getAddrRanges() const override;
+    TranslationGenPtr translate(Addr vaddr, Addr size) override;
 
   private:
     // PIO parameters (since we don't inherit BasicPioDevice)
@@ -43,11 +44,6 @@ class SimdAccel : public DmaDevice
     std::array<uint8_t, 8> bufA{};
     std::array<uint8_t, 8> bufB{};
     std::array<uint8_t, 8> bufR{};
-
-    // Events (DMA completions)
-    EventFunctionWrapper evReadADone;
-    EventFunctionWrapper evReadBDone;
-    EventFunctionWrapper evWriteDone;
 
     // Helpers
     void kick();            // start op when CMD.start is written

@@ -42,7 +42,17 @@ int main(void)
     int ok = 1;
     for (int i = 0; i < N; i++) {
         uint64_t exp = A[i] * B[i];
-        if (C[i] != exp) { ok = 0; break; }
+        if (C[i] != exp) {
+            ok = 0;
+            // Write failure indicator (0xDEADBEEF) to first element
+            C[0] = 0xDEADBEEFDEADBEEFULL;
+            break;
+        }
+    }
+    // Write success/failure marker
+    if (ok) {
+        // Success: write magic value 0xC0FFEE to last element
+        C[N-1] = 0xC0FFEEC0FFEEULL;
     }
     return ok ? 0 : 1;
 }
@@ -60,4 +70,3 @@ void _start(void){
     int r = main();
     do_exit(r);
 }
-
