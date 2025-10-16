@@ -114,14 +114,14 @@ m5.stats.dump()
 # Check if exit was normal
 if "exiting with last active thread" in exit_event.getCause():
     print("[simd-config] Simulation completed normally")
-    print("[simd-config]")
-    print("[simd-config] To verify test result:")
-    print("[simd-config]   - Check C[7] value in memory")
-    print("[simd-config]   - If C[7] = 0xC0FFEEC0FFEE → TEST PASSED")
-    print("[simd-config]   - If C[0] = 0xDEADBEEFDEADBEEF → TEST FAILED")
-    print("[simd-config]   - Expected results: C[i] = A[i] * B[i]")
-    print(
-        "[simd-config]     C[0]=0, C[1]=4, C[2]=12, C[3]=24, C[4]=40, C[5]=60, C[6]=84, C[7]=112"
-    )
+    # print("[simd-config]")
+    # print("[simd-config] To verify test result:")
+    # print("[simd-config]   - Check C[7] value in memory")
+    # print("[simd-config]   - If C[7] = 0xC0FFEEC0FFEE → TEST PASSED")
+    # print("[simd-config]   - If C[0] = 0xDEADBEEFDEADBEEF → TEST FAILED")
+    # print("[simd-config]   - Expected results: C[i] = A[i] * B[i]")
+    # print(
+    #     "[simd-config]     C[0]=0, C[1]=4, C[2]=12, C[3]=24, C[4]=40, C[5]=60, C[6]=84, C[7]=112"
+    # )
 else:
     print(f"[simd-config] ✗ Abnormal termination: {exit_event.getCause()}")

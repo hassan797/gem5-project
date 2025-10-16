@@ -63,6 +63,9 @@ SimdAccel::write(PacketPtr pkt)
       case 0x10: regDst  = val; break;
       case 0x18: regLen  = val; break;
       case 0x20: regCmd  = val; kick(); break;
+      case 0x30: regOpType = val; break;  // Operation type
+      case 0x38: regDimK = val; break;    // K dimension for GEMM
+      case 0x40: regDimN = val; break;    // N dimension for GEMM
       default: break;
     }
     pkt->makeResponse();
@@ -72,14 +75,38 @@ SimdAccel::write(PacketPtr pkt)
 void
 SimdAccel::kick()
 {
-    if (!(regCmd & 0x1) || regLen == 0)
+    if (!(regCmd & 0x1))
         return;
 
-    DPRINTF(SimdAccel, "KICK: Starting operation with regLen=%d\n", regLen);
     regStatus |= 0x1;      // busy
     regCmd &= ~0x1ULL;     // clear start
-    idx = 0;
-    issueReadA();
+    
+    // Dispatch based on operation type
+    if (regOpType == 0) {
+        // Element-wise multiply
+        if (regLen == 0) return;
+        DPRINTF(SimdAccel, "KICK: Starting element-wise multiply with regLen=%d\n", regLen);
+        idx = 0;
+        issueReadA();
+    } else if (regOpType == 1) {
+        // GEMM: C[M×N] = A[M×K] × B[K×N]
+        gemmM = regLen;  // M stored in regLen
+        gemmK = regDimK;
+        gemmN = regDimN;
+        
+        if (gemmM == 0 || gemmK == 0 || gemmN == 0) {
+            DPRINTF(SimdAccel, "KICK: Invalid GEMM dimensions M=%d K=%d N=%d\n", 
+                    gemmM, gemmK, gemmN);
+            regStatus &= ~0x1ULL;
+            return;
+        }
+        
+        DPRINTF(SimdAccel, "KICK: Starting GEMM M=%d K=%d N=%d\n", gemmM, gemmK, gemmN);
+        kickGemm();
+    } else {
+        DPRINTF(SimdAccel, "KICK: Unknown operation type %d\n", regOpType);
+        regStatus &= ~0x1ULL;
+    }
 }
 
 void
@@ -173,6 +200,138 @@ SimdAccel::translate(Addr vaddr, Addr size)
     // This allows DMA to work with the process's virtual address space
     auto process = sys->threads[0]->getProcessPtr();
     return process->pTable->translateRange(vaddr, size);
+}
+
+// ========== GEMM Implementation: C[M×N] = A[M×K] × B[K×N] ==========
+
+void
+SimdAccel::kickGemm()
+{
+    // Initialize GEMM state
+    gemmI = 0;
+    gemmJ = 0;
+    gemmKIdx = 0;
+    gemmAccum = 0;
+    
+    DPRINTF(SimdAccel, "kickGemm: Starting C[%d][%d] computation\n", gemmI, gemmJ);
+    
+    // Start first dot product: C[0][0] = sum(A[0][k] * B[k][0])
+    gemmReadA();
+}
+
+void
+SimdAccel::gemmReadA()
+{
+    // Read A[i][k] where i=gemmI, k=gemmKIdx
+    // A is stored in row-major: A[i][k] is at offset (i * gemmK + k) * 8 bytes
+    const Addr addr = regSrcA + (gemmI * gemmK + gemmKIdx) * 8;
+    
+    DPRINTF(SimdAccel, "gemmReadA: Reading A[%d][%d] from addr 0x%x\n", 
+            gemmI, gemmKIdx, addr);
+    
+    auto cb = new DmaVirtCallback<uint64_t>(
+        [this](const uint64_t &) { gemmOnReadADone(); });
+    dmaReadVirt(addr, 8, cb, bufA.data());
+}
+
+void
+SimdAccel::gemmOnReadADone()
+{
+    std::memcpy(&tmpA, bufA.data(), 8);
+    DPRINTF(SimdAccel, "gemmOnReadADone: A[%d][%d]=%d\n", gemmI, gemmKIdx, tmpA);
+    gemmReadB();
+}
+
+void
+SimdAccel::gemmReadB()
+{
+    // Read B[k][j] where k=gemmKIdx, j=gemmJ
+    // B is stored in row-major: B[k][j] is at offset (k * gemmN + j) * 8 bytes
+    const Addr addr = regSrcB + (gemmKIdx * gemmN + gemmJ) * 8;
+    
+    DPRINTF(SimdAccel, "gemmReadB: Reading B[%d][%d] from addr 0x%x\n", 
+            gemmKIdx, gemmJ, addr);
+    
+    auto cb = new DmaVirtCallback<uint64_t>(
+        [this](const uint64_t &) { gemmOnReadBDone(); });
+    dmaReadVirt(addr, 8, cb, bufB.data());
+}
+
+void
+SimdAccel::gemmOnReadBDone()
+{
+    std::memcpy(&tmpB, bufB.data(), 8);
+    DPRINTF(SimdAccel, "gemmOnReadBDone: B[%d][%d]=%d\n", gemmKIdx, gemmJ, tmpB);
+    
+    // Accumulate: accum += A[i][k] * B[k][j]
+    gemmAccum += tmpA * tmpB;
+    
+    DPRINTF(SimdAccel, "gemmOnReadBDone: accum=%d after A*B=%d*%d\n", 
+            gemmAccum, tmpA, tmpB);
+    
+    // Move to next k
+    gemmKIdx++;
+    
+    if (gemmKIdx < gemmK) {
+        // Continue dot product for current C[i][j]
+        gemmReadA();
+    } else {
+        // Finished computing C[i][j], write it out
+        tmpR = gemmAccum;
+        std::memcpy(bufR.data(), &tmpR, 8);
+        
+        DPRINTF(SimdAccel, "gemmOnReadBDone: Completed C[%d][%d]=%d, writing\n", 
+                gemmI, gemmJ, tmpR);
+        
+        gemmWriteC();
+    }
+}
+
+void
+SimdAccel::gemmWriteC()
+{
+    // Write C[i][j]
+    // C is stored in row-major: C[i][j] is at offset (i * gemmN + j) * 8 bytes
+    const Addr addr = regDst + (gemmI * gemmN + gemmJ) * 8;
+    
+    DPRINTF(SimdAccel, "gemmWriteC: Writing C[%d][%d]=%d to addr 0x%x\n", 
+            gemmI, gemmJ, tmpR, addr);
+    
+    auto cb = new DmaVirtCallback<uint64_t>(
+        [this](const uint64_t &) { gemmOnWriteDone(); });
+    dmaWriteVirt(addr, 8, cb, bufR.data());
+}
+
+void
+SimdAccel::gemmOnWriteDone()
+{
+    DPRINTF(SimdAccel, "gemmOnWriteDone: Finished C[%d][%d]\n", gemmI, gemmJ);
+    
+    // Move to next output element
+    gemmJ++;
+    if (gemmJ < gemmN) {
+        // Next column in same row
+        gemmKIdx = 0;
+        gemmAccum = 0;
+        DPRINTF(SimdAccel, "gemmOnWriteDone: Moving to C[%d][%d]\n", gemmI, gemmJ);
+        gemmReadA();
+    } else {
+        // Move to next row
+        gemmI++;
+        gemmJ = 0;
+        
+        if (gemmI < gemmM) {
+            // Next row
+            gemmKIdx = 0;
+            gemmAccum = 0;
+            DPRINTF(SimdAccel, "gemmOnWriteDone: Moving to C[%d][%d]\n", gemmI, gemmJ);
+            gemmReadA();
+        } else {
+            // All done!
+            DPRINTF(SimdAccel, "gemmOnWriteDone: GEMM complete!\n");
+            nextOrDone();
+        }
+    }
 }
 
 

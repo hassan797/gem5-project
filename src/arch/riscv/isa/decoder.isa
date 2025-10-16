@@ -600,6 +600,24 @@ decode QUADRANT default Unknown::unknown() {
                     EA  = rvZext(0x0000000040000000ULL + 0x20);
                     Mem = 1ULL;
                 }}, inst_flags=MemWriteOp); }
+
+                // Write OP_TYPE (0=elemwise_mult, 1=GEMM)
+                0x5: decode FUNCT7 { 0x01: xcop_optype({{
+                    EA  = rvZext(0x0000000040000000ULL + 0x30);
+                    Mem = Rs1;
+                }}, inst_flags=MemWriteOp); }
+
+                // Write K dimension for GEMM
+                0x6: decode FUNCT7 { 0x01: xcop_dimk({{
+                    EA  = rvZext(0x0000000040000000ULL + 0x38);
+                    Mem = Rs1;
+                }}, inst_flags=MemWriteOp); }
+
+                // Write N dimension for GEMM
+                0x7: decode FUNCT7 { 0x01: xcop_dimn({{
+                    EA  = rvZext(0x0000000040000000ULL + 0x40);
+                    Mem = Rs1;
+                }}, inst_flags=MemWriteOp); }
             }
         }
 
