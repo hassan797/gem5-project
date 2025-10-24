@@ -1,0 +1,70 @@
+Stride and Strided Vector Loads (RVV) – Clear Explanation
+
+1) What is “stride”?
+- Stride is the distance in BYTES between the consecutive elements you want to load/store.
+- Think: “After loading one element, how many bytes do I skip to get to the next element I care about?”
+
+2) Why do we need stride for GEMM?
+- Matrices in C are stored in row‑major order: rows are contiguous, columns are not.
+- Accessing B[k][j] for k = 0..K-1 (a column of B) means jumping by one whole row each time.
+
+3) Memory layout refresher (row‑major)
+Let B be K×N of uint64_t (8 bytes per element). In memory:
+- Row 0: B[0][0], B[0][1], B[0][2], …, B[0][N-1]
+- Row 1: B[1][0], B[1][1], B[1][2], …, B[1][N-1]
+- Row 2: B[2][0], B[2][1], …
+...
+Rows are back-to-back. Columns are spaced by an entire row.
+
+4) Row vs Column access
+- Row access (contiguous): B[k][0], B[k][1], B[k][2], …
+  • Next element is 8 bytes away (for uint64_t).
+  • Can use normal vector loads (vle64.v) easily.
+
+- Column access (non‑contiguous): B[0][j], B[1][j], B[2][j], …
+  • Next element is ONE FULL ROW away.
+  • Distance between B[m][j] and B[m+1][j] is N * sizeof(uint64_t) bytes.
+  • Need a STRIDED vector load (vlse64.v).
+
+5) The code you asked about (shown as plain text)
+// Load B[k:k+vl-1][j] with stride = N * 8 bytes
+uint64_t stride = N * 8;             // N columns * 8 bytes per uint64_t
+asm volatile("vlse64.v v1, (%0), %1" 
+             : : "r"(&b[k][j]), "r"(stride));
+
+What it does:
+- v1[0] ← *( (uint8_t*)&b[k][j]     + 0 * stride )  = B[k+0][j]
+- v1[1] ← *( (uint8_t*)&b[k][j]     + 1 * stride )  = B[k+1][j]
+- v1[2] ← *( (uint8_t*)&b[k][j]     + 2 * stride )  = B[k+2][j]
+- v1[3] ← *( (uint8_t*)&b[k][j]     + 3 * stride )  = B[k+3][j]
+(If VLEN=256 and e64, vl will be 4; generally it loads “vl” elements.)
+
+6) Why stride = N * 8?
+- Each row has N elements.
+- Each element is 8 bytes (uint64_t).
+- To move from B[r][j] to B[r+1][j] you jump past one whole row: N * 8 bytes.
+
+7) Putting it into GEMM (vectorized k‑loop)
+Goal (one C[i][j]):  C[i][j] = sum over k of A[i][k] * B[k][j].
+Vectorized steps for a block of k values (k..k+vl-1):
+- Use vle64.v to load A[i][k..k+vl-1] (contiguous row elements of A) into v0.
+- Use vlse64.v to load B[k..k+vl-1][j] (a column slice of B) into v1 using stride=N*8.
+- vmul.vv v2, v0, v1  → multiply elementwise in parallel (SIMD!).
+- vredsum.vs v3, v2, v3 → sum all partial products to one scalar (in v3[0]).
+- Accumulate that into the running sum for C[i][j].
+
+8) Small concrete example (N=4, 64‑bit elements → stride = 4 * 8 = 32 bytes)
+We want column j=1: [B[0][1], B[1][1], B[2][1], B[3][1]]
+Base pointer = &B[0][1]
+vlse64.v v1, (&B[0][1]), 32 loads:
+- v1[0] = *(base + 0*32) = B[0][1]
+- v1[1] = *(base + 1*32) = B[1][1]
+- v1[2] = *(base + 2*32) = B[2][1]
+- v1[3] = *(base + 3*32) = B[3][1]
+This exactly forms the column vector we need for the dot product.
+
+9) Summary
+- Stride = byte distance between consecutive elements of interest.
+- For column loads in row‑major matrices: stride = N * sizeof(element).
+- vlse64.v enables SIMD loads of columns efficiently.
+- Combined with vle64.v (for rows), vmul.vv, and vredsum.vs, you get a clean RVV implementation of GEMM’s inner dot product.
