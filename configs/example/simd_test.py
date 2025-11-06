@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 import sys
-import os
+import m5
 from m5.objects import *
-from m5.util import addToPath
 
-# Bring in the simple cache helper classes
-gem5_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-addToPath(os.path.join(gem5_root, 'configs', 'common'))
-from Caches import L1_ICache, L1_DCache, L2Cache
-
-# Minimal SE RISC-V system with the SimdAccel device
+# Minimal SE system
 system = System()
 system.clk_domain = SrcClockDomain(clock='1GHz', voltage_domain=VoltageDomain())
 system.mem_mode = 'timing'
@@ -18,24 +12,18 @@ system.mem_ranges = [AddrRange('512MB')]
 system.membus = SystemXBar()
 
 system.cpu = TimingSimpleCPU()
-
-# Connect CPU directly to membus (no caches for simplicity)
 system.cpu.icache_port = system.membus.cpu_side_ports
 system.cpu.dcache_port = system.membus.cpu_side_ports
-
-# Create interrupt controller
 system.cpu.createInterruptController()
 
 # SimdAccel device
 system.simd = SimdAccel(pio_addr=0x40000000, pio_size=0x1000,
                         num_lanes=4, compute_latency="10ns")
-# MMIO (PIO) goes on the memory side of the bus (device is slave)
 system.simd.pio = system.membus.mem_side_ports
-# DMA master goes on the CPU side of the bus
 system.simd.dma = system.membus.cpu_side_ports
 
 # System port
-system.system_port = system.membus.slave
+system.system_port = system.membus.cpu_side_ports
 
 # DRAM
 system.mem_ctrl = MemCtrl()
@@ -43,21 +31,22 @@ system.mem_ctrl.dram = DDR3_1600_8x8()
 system.mem_ctrl.dram.range = system.mem_ranges[0]
 system.mem_ctrl.port = system.membus.mem_side_ports
 
-# SE workload (binary passed as argv[1])
+# Workload
+system.workload = SEWorkload.init_compatible(sys.argv[1])
+
 process = Process()
 process.cmd = [sys.argv[1]]
-process.executable = sys.argv[1]
 system.cpu.workload = process
 system.cpu.createThreads()
 
 root = Root(full_system=False, system=system)
 
-def main():
-    import m5
-    m5.instantiate()
-    print('Beginning simulation…')
-    exit_event = m5.simulate()
-    print('Exiting @ tick', m5.curTick(), 'because', exit_event.getCause())
+m5.instantiate()
 
-if __name__ == '__m5_main__':
-    main()
+# Map MMIO region in the process page table (identity mapping for 0x40000000)
+# This allows SE mode to access the SIMD accelerator's MMIO registers
+process.map(0x40000000, 0x40000000, 0x1000, False)
+
+print('Beginning simulation…')
+exit_event = m5.simulate()
+print('Exiting @ tick', m5.curTick(), 'because', exit_event.getCause())
