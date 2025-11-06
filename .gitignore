@@ -46,7 +46,9 @@ build/
 *.tmp
 *.bin
 *.exe
+*.pub
 .idea/
 .vscode/
 *.ipynb_checkpoints
 __pycache__/
+configs/mlperf/INTEGRATION_GUIDE.md

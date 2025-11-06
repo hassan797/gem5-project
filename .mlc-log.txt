@@ -1,0 +1,153 @@
+[2025-10-15 02:06:48,697 repo_action.py:306 INFO] - Repository mlperf-automations already exists at /home/hassan/MLC/repos/mlcommons@mlperf-automations. Checking for local changes...
+[2025-10-15 02:06:48,805 repo_action.py:317 INFO] - No local changes detected. Pulling latest changes...
+[2025-10-15 02:06:50,059 repo_action.py:319 INFO] - Repository successfully pulled.
+[2025-10-15 02:06:50,059 repo_action.py:333 INFO] - Registering the repo in repos.json
+[2025-10-15 02:07:32,889 module.py:574 INFO] - * mlcr detect,os
+[2025-10-15 02:07:32,919 module.py:5311 INFO] -        ! cd /home/hassan/MLC/repos/local/cache/detect-os_b244aefd
+[2025-10-15 02:07:32,919 module.py:5312 INFO] -        ! call /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/detect-os/run.sh from tmp-run.sh
+[2025-10-15 02:07:32,977 module.py:5457 INFO] -        ! call "postprocess" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/detect-os/customize.py
+[2025-10-15 02:07:33,032 module.py:2176 INFO] -   - cache UID: b244aefdedf54e63
+[2025-10-15 02:07:33,032 module.py:2207 INFO] - {
+  "return": 0,
+  "env": {
+    "MLC_HOST_OS_TYPE": "linux",
+    "MLC_HOST_OS_BITS": "64",
+    "MLC_HOST_OS_FLAVOR": "ubuntu",
+    "MLC_HOST_OS_FLAVOR_LIKE": "debian",
+    "MLC_HOST_OS_VERSION": "24.04",
+    "MLC_HOST_OS_KERNEL_VERSION": "6.14.0-33-generic",
+    "MLC_HOST_OS_GLIBC_VERSION": "2.39",
+    "MLC_HOST_OS_MACHINE": "x86_64",
+    "MLC_HOST_OS_PACKAGE_MANAGER": "apt",
+    "MLC_HOST_OS_PACKAGE_MANAGER_INSTALL_CMD": "DEBIAN_FRONTEND=noninteractive apt-get install -y",
+    "MLC_HOST_OS_PACKAGE_MANAGER_UPDATE_CMD": "apt-get update -y",
+    "+MLC_HOST_OS_DEFAULT_LIBRARY_PATH": [
+      "/usr/local/lib/x86_64-linux-gnu",
+      "/lib/x86_64-linux-gnu",
+      "/usr/lib/x86_64-linux-gnu",
+      "/usr/lib/x86_64-linux-gnu64",
+      "/usr/local/lib64",
+      "/lib64",
+      "/usr/lib64",
+      "/usr/local/lib",
+      "/lib",
+      "/usr/lib",
+      "/usr/x86_64-linux-gnu/lib64",
+      "/usr/x86_64-linux-gnu/lib"
+    ],
+    "MLC_HOST_PLATFORM_FLAVOR": "x86_64",
+    "MLC_HOST_PYTHON_BITS": "64",
+    "MLC_HOST_SYSTEM_NAME": "hassan-VMware-Virtual-Platform"
+  },
+  "new_env": {
+    "MLC_HOST_OS_TYPE": "linux",
+    "MLC_HOST_OS_BITS": "64",
+    "MLC_HOST_OS_FLAVOR": "ubuntu",
+    "MLC_HOST_OS_FLAVOR_LIKE": "debian",
+    "MLC_HOST_OS_VERSION": "24.04",
+    "MLC_HOST_OS_KERNEL_VERSION": "6.14.0-33-generic",
+    "MLC_HOST_OS_GLIBC_VERSION": "2.39",
+    "MLC_HOST_OS_MACHINE": "x86_64",
+    "MLC_HOST_OS_PACKAGE_MANAGER": "apt",
+    "MLC_HOST_OS_PACKAGE_MANAGER_INSTALL_CMD": "DEBIAN_FRONTEND=noninteractive apt-get install -y",
+    "MLC_HOST_OS_PACKAGE_MANAGER_UPDATE_CMD": "apt-get update -y",
+    "+MLC_HOST_OS_DEFAULT_LIBRARY_PATH": [
+      "/usr/local/lib/x86_64-linux-gnu",
+      "/lib/x86_64-linux-gnu",
+      "/usr/lib/x86_64-linux-gnu",
+      "/usr/lib/x86_64-linux-gnu64",
+      "/usr/local/lib64",
+      "/lib64",
+      "/usr/lib64",
+      "/usr/local/lib",
+      "/lib",
+      "/usr/lib",
+      "/usr/x86_64-linux-gnu/lib64",
+      "/usr/x86_64-linux-gnu/lib"
+    ],
+    "MLC_HOST_PLATFORM_FLAVOR": "x86_64",
+    "MLC_HOST_PYTHON_BITS": "64",
+    "MLC_HOST_SYSTEM_NAME": "hassan-VMware-Virtual-Platform"
+  },
+  "state": {
+    "os_uname_machine": "x86_64",
+    "os_uname_all": "Linux hassan-VMware-Virtual-Platform 6.14.0-33-generic #33~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep 19 17:02:30 UTC 2 x86_64 x86_64 x86_64 GNU/Linux"
+  },
+  "new_state": {
+    "os_uname_machine": "x86_64",
+    "os_uname_all": "Linux hassan-VMware-Virtual-Platform 6.14.0-33-generic #33~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep 19 17:02:30 UTC 2 x86_64 x86_64 x86_64 GNU/Linux"
+  },
+  "deps": []
+}
+[2025-10-15 02:08:16,833 module.py:574 INFO] - * mlcr run-mlperf,inference,_find-performance,_full,_r5.0-dev
+[2025-10-15 02:08:16,867 module.py:574 INFO] -   * mlcr get,mlcommons,inference,src
+[2025-10-15 02:08:16,918 module.py:574 INFO] -     * mlcr detect,os
+[2025-10-15 02:08:16,920 module.py:1294 INFO] -          ! load /home/hassan/MLC/repos/local/cache/detect-os_b244aefd/mlc-cached-state.json
+[2025-10-15 02:08:16,942 module.py:574 INFO] -     * mlcr get,python3
+[2025-10-15 02:08:17,036 module.py:3962 INFO] -         * /home/hassan/.venvs/mlperf/bin/python3
+[2025-10-15 02:08:17,037 module.py:5311 INFO] -                ! cd /home/hassan/MLC/repos/local/cache/get-python3_8daa417a
+[2025-10-15 02:08:17,037 module.py:5312 INFO] -                ! call /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/get-python3/run.sh from tmp-run.sh
+[2025-10-15 02:08:17,062 module.py:5457 INFO] -                ! call "detect_version" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/get-python3/customize.py
+[2025-10-15 02:08:17,121 customize.py:69 INFO] -           Detected version: 3.12.3
+[2025-10-15 02:08:17,122 module.py:4278 INFO] -         # Found artifact in /home/hassan/.venvs/mlperf/bin/python3
+[2025-10-15 02:08:17,123 module.py:5311 INFO] -            ! cd /home/hassan/MLC/repos/local/cache/get-python3_8daa417a
+[2025-10-15 02:08:17,123 module.py:5312 INFO] -            ! call /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/get-python3/run.sh from tmp-run.sh
+[2025-10-15 02:08:17,140 module.py:5457 INFO] -            ! call "postprocess" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/get-python3/customize.py
+[2025-10-15 02:08:17,145 customize.py:69 INFO] -           Detected version: 3.12.3
+[2025-10-15 02:08:17,173 module.py:2176 INFO] -       - cache UID: 8daa417a8807444e
+[2025-10-15 02:08:17,198 module.py:574 INFO] -     * mlcr get,git,repo,_branch.master,_repo.https://github.com/mlcommons/inference
+[2025-10-15 02:08:17,258 module.py:574 INFO] -       * mlcr detect,os
+[2025-10-15 02:08:17,260 module.py:1294 INFO] -            ! load /home/hassan/MLC/repos/local/cache/detect-os_b244aefd/mlc-cached-state.json
+[2025-10-15 02:08:17,271 module.py:5311 INFO] -            ! cd /home/hassan/MLC/repos/local/cache/get-git-repo_inference-src_8b44fd49
+[2025-10-15 02:08:17,271 module.py:5312 INFO] -            ! call /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/get-git-repo/run.sh from tmp-run.sh
+[2025-10-15 02:08:32,784 module.py:5457 INFO] -            ! call "postprocess" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/get-git-repo/customize.py
+[2025-10-15 02:08:32,811 module.py:2176 INFO] -       - cache UID: 8b44fd49a90946f5
+[2025-10-15 02:08:32,812 module.py:2251 INFO] - MLC cache path to the Git repo: /home/hassan/MLC/repos/local/cache/get-git-repo_inference-src_8b44fd49/inference
+[2025-10-15 02:08:32,813 module.py:5457 INFO] -          ! call "postprocess" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/get-mlperf-inference-src/customize.py
+[2025-10-15 02:08:32,926 module.py:2176 INFO] -     - cache UID: dc587f3e5a27427a
+[2025-10-15 02:08:32,941 module.py:574 INFO] -   * mlcr get,mlperf,inference,results,dir,_version.r5.0-dev
+[2025-10-15 02:08:32,982 module.py:5457 INFO] -          ! call "postprocess" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/get-mlperf-inference-results-dir/customize.py
+[2025-10-15 02:08:33,007 module.py:2176 INFO] -     - cache UID: 09a976b8a1004804
+[2025-10-15 02:08:33,018 module.py:574 INFO] -   * mlcr install,pip-package,for-mlc-python,_package.tabulate
+[2025-10-15 02:08:35,306 module.py:5457 INFO] -          ! call "postprocess" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/install-pip-package-for-mlc-python/customize.py
+[2025-10-15 02:08:35,327 module.py:2176 INFO] -     - cache UID: 098a1f167de14a6f
+[2025-10-15 02:08:35,335 module.py:574 INFO] -   * mlcr get,mlperf,inference,utils
+[2025-10-15 02:08:35,374 module.py:574 INFO] -     * mlcr get,mlperf,inference,src
+[2025-10-15 02:08:35,376 module.py:1294 INFO] -          ! load /home/hassan/MLC/repos/local/cache/get-mlperf-inference-src_dc587f3e/mlc-cached-state.json
+[2025-10-15 02:08:35,387 module.py:5457 INFO] -          ! call "postprocess" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/get-mlperf-inference-utils/customize.py
+[2025-10-15 02:08:35,427 customize.py:273 INFO] -
+Running loadgen scenario: Offline and mode: performance
+[2025-10-15 02:08:35,763 module.py:574 INFO] - * mlcr get,mlperf,inference,submission,dir,local,_version.r5.0-dev
+[2025-10-15 02:08:35,801 module.py:5457 INFO] -        ! call "postprocess" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/get-mlperf-inference-submission-dir/customize.py
+[2025-10-15 02:08:35,837 module.py:2176 INFO] -   - cache UID: c9e63f8cd5bc459a
+[2025-10-15 02:08:35,858 module.py:574 INFO] - * mlcr get,dataset,imagenet,validation,original,_full
+[2025-10-15 02:08:35,911 module.py:574 INFO] -   * mlcr detect,os
+[2025-10-15 02:08:35,912 module.py:1294 INFO] -        ! load /home/hassan/MLC/repos/local/cache/detect-os_b244aefd/mlc-cached-state.json
+[2025-10-15 02:08:35,941 module.py:574 INFO] -   * mlcr download-and-extract,file,_extract,_url.https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar
+[2025-10-15 02:08:36,016 module.py:574 INFO] -     * mlcr download,file,_mlcutil,_url.https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar
+[2025-10-15 02:08:36,035 module.py:574 INFO] -       * mlcr detect,os
+[2025-10-15 02:08:36,037 module.py:1294 INFO] -            ! load /home/hassan/MLC/repos/local/cache/detect-os_b244aefd/mlc-cached-state.json
+[2025-10-15 02:08:36,049 customize.py:78 INFO] -
+[2025-10-15 02:08:36,050 customize.py:79 INFO] - Downloading from https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar
+[2025-10-15 02:24:55,277 module.py:5311 INFO] -            ! cd /home/hassan/MLC/repos/local/cache/get-dataset-imagenet-val_4b72fc3e
+[2025-10-15 02:24:55,281 module.py:5312 INFO] -            ! call /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/download-file/run.sh from tmp-run.sh
+[2025-10-15 02:25:40,767 module.py:5457 INFO] -            ! call "postprocess" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/download-file/customize.py
+[2025-10-15 02:25:40,778 module.py:5457 INFO] -          ! call "postprocess" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/download-and-extract/customize.py
+[2025-10-15 02:25:40,794 module.py:574 INFO] -   * mlcr extract,file,_keep,_path./home/hassan/MLC/repos/local/cache/get-dataset-imagenet-val_4b72fc3e/ILSVRC2012_img_val.tar
+[2025-10-15 02:25:40,816 module.py:574 INFO] -     * mlcr detect,os
+[2025-10-15 02:25:40,819 module.py:1294 INFO] -          ! load /home/hassan/MLC/repos/local/cache/detect-os_b244aefd/mlc-cached-state.json
+[2025-10-15 02:25:40,828 customize.py:178 INFO] -
+[2025-10-15 02:25:40,828 customize.py:179 INFO] - Current directory: /home/hassan/MLC/repos/local/cache/get-dataset-imagenet-val_4b72fc3e
+[2025-10-15 02:25:40,828 customize.py:180 INFO] - Command line: "mkdir -p imagenet-2012-val && tar    -C imagenet-2012-val  -xvf /home/hassan/MLC/repos/local/cache/get-dataset-imagenet-val_4b72fc3e/ILSVRC2012_img_val.tar"
+[2025-10-15 02:25:40,829 customize.py:181 INFO] -
+[2025-10-15 02:25:40,830 module.py:5311 INFO] -          ! cd /home/hassan/MLC/repos/local/cache/get-dataset-imagenet-val_4b72fc3e
+[2025-10-15 02:25:40,831 module.py:5312 INFO] -          ! call /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/extract-file/run.sh from tmp-run.sh
+[2025-10-15 02:26:24,463 module.py:5457 INFO] -          ! call "postprocess" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/extract-file/customize.py
+[2025-10-15 02:26:24,486 module.py:5457 INFO] -        ! call "postprocess" from /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/get-dataset-imagenet-val/customize.py
+[2025-10-15 02:26:24,585 module.py:2176 INFO] -   - cache UID: 4b72fc3eda9f42d3
+[2025-10-15 02:26:24,957 module.py:574 INFO] - * mlcr build,dockerfile
+[2025-10-15 02:26:24,986 module.py:574 INFO] -   * mlcr get,docker
+[2025-10-15 02:26:25,107 module.py:574 INFO] -     * mlcr detect,os
+[2025-10-15 02:26:25,110 module.py:1294 INFO] -          ! load /home/hassan/MLC/repos/local/cache/detect-os_b244aefd/mlc-cached-state.json
+[2025-10-15 02:26:25,305 module.py:5311 INFO] -          ! cd /home/hassan/MLC/repos/local/cache/get-docker_e6b8ffed
+[2025-10-15 02:26:25,305 module.py:5312 INFO] -          ! call /home/hassan/MLC/repos/mlcommons@mlperf-automations/script/get-docker/install-ubuntu.sh from tmp-run.sh
