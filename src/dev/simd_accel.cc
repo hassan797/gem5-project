@@ -2,7 +2,14 @@
  * SIMD accelerator: DMA-based coprocessor for array operations.
  * Supports:
  *   - Element-wise multiplication (opType=0)
- *   - GEMM matrix multiplication (opType=1): C[M×N] = A[M×K] × B[K×N]
+ *   - GEMM matrix multipl    std::memcpy(&tm    std::memcpy(&tmpB[0], bufB.data(), sizeof(uint64_t));
+    tmpR[0] = tmpA[0] * tmpB[0];
+    std::memcpy(bufR.data(), &tmpR[0], sizeof(uint64_t));
+    
+    DPRINTF(SimdAccel, "onReadBDone: B[%d]=%lu, result=%lu\n", idx, tmpB[0], tmpR[0]);
+    issueWrite();, bufA.data(), sizeof(uint64_t));
+    DPRINTF(SimdAccel, "onReadADone: A[%d]=%lu\n", idx, tmpA[0]);
+    issueReadB();tion (opType=1): C[M×N] = A[M×K] × B[K×N]
  * 
  * Uses DmaVirtDevice for virtual address translation and asynchronous DMA.
  */
@@ -22,11 +29,22 @@
 namespace gem5 {
 
 SimdAccel::SimdAccel(const SimdAccelParams &p)
-        : DmaVirtDevice(p),
-      pioAddr(p.pio_addr),
-      pioSize(p.pio_size),
-      pioDelay(p.pio_latency)
-{ }
+    : BasicPioDevice(p, p.pio_size),
+      DmaDevice(p),
+      numLanes(p.num_lanes),
+      computeLatency(p.compute_latency)
+{
+    // Resize buffers for SIMD lanes
+    tmpA.resize(numLanes);
+    tmpB.resize(numLanes);
+    tmpR.resize(numLanes);
+    bufA.resize(numLanes * sizeof(uint64_t));
+    bufB.resize(numLanes * sizeof(uint64_t));
+    bufR.resize(numLanes * sizeof(uint64_t));
+    
+    DPRINTF(SimdAccel, "SimdAccel created with %d SIMD lanes, compute latency = %lu ticks\n",
+            numLanes, computeLatency);
+}
 
 void
 SimdAccel::init()
@@ -131,17 +149,16 @@ SimdAccel::issueReadA()
         return;
     }
     const Addr a = regSrcA + idx * sizeof(uint64_t);
-    DPRINTF(SimdAccel, "issueReadA: reading A[%d] from addr 0x%x\n", idx, a);
-    auto cb = new DmaVirtCallback<uint64_t>(
-        [this](const uint64_t &) { onReadADone(); });
-    dmaReadVirt(a, sizeof(uint64_t), cb, bufA.data());
+    DPRINTF(SimdAccel, "issueReadA: reading A[%d] from addr 0x%lx\n", idx, a);
+    auto *cb = new EventFunctionWrapper([this]() { onReadADone(); }, name());
+    dmaRead(a, sizeof(uint64_t), cb, bufA.data());
 }
 
 void
 SimdAccel::onReadADone()
 {
-    std::memcpy(&tmpA, bufA.data(), sizeof(uint64_t));
-    DPRINTF(SimdAccel, "onReadADone: A[%d]=%d\n", idx, tmpA);
+    std::memcpy(&tmpA[0], bufA.data(), sizeof(uint64_t));
+    DPRINTF(SimdAccel, "onReadADone: A[%d]=%lu\n", idx, tmpA[0]);
     issueReadB();
 }
 
@@ -149,18 +166,17 @@ void
 SimdAccel::issueReadB()
 {
     const Addr b = regSrcB + idx * sizeof(uint64_t);
-    auto cb = new DmaVirtCallback<uint64_t>(
-        [this](const uint64_t &) { onReadBDone(); });
-    dmaReadVirt(b, sizeof(uint64_t), cb, bufB.data());
+    auto *cb = new EventFunctionWrapper([this]() { onReadBDone(); }, name());
+    dmaRead(b, sizeof(uint64_t), cb, bufB.data());
 }
 
 void
 SimdAccel::onReadBDone()
 {
-    std::memcpy(&tmpB, bufB.data(), sizeof(uint64_t));
-    tmpR = tmpA * tmpB;  // Element-wise multiplication
-    std::memcpy(bufR.data(), &tmpR, sizeof(uint64_t));
-    DPRINTF(SimdAccel, "onReadBDone: B[%d]=%d, result=%d\n", idx, tmpB, tmpR);
+    std::memcpy(&tmpB[0], bufB.data(), sizeof(uint64_t));
+    tmpR[0] = tmpA[0] * tmpB[0];  // Element-wise multiplication
+    std::memcpy(bufR.data(), &tmpR[0], sizeof(uint64_t));
+    DPRINTF(SimdAccel, "onReadBDone: B[%d]=%lu, result=%lu\n", idx, tmpB[0], tmpR[0]);
     issueWrite();
 }
 
@@ -168,10 +184,9 @@ void
 SimdAccel::issueWrite()
 {
     const Addr d = regDst + idx * sizeof(uint64_t);
-    DPRINTF(SimdAccel, "issueWrite: writing C[%d]=%d to address 0x%x\n", idx, tmpR, d);
-    auto cb = new DmaVirtCallback<uint64_t>(
-        [this](const uint64_t &) { onWriteDone(); });
-    dmaWriteVirt(d, sizeof(uint64_t), cb, bufR.data());
+    DPRINTF(SimdAccel, "issueWrite: writing C[%d]=%lu to address 0x%lx\n", idx, tmpR[0], d);
+    auto *cb = new EventFunctionWrapper([this]() { onWriteDone(); }, name());
+    dmaWrite(d, sizeof(uint64_t), cb, bufR.data());
 }
 
 void
@@ -199,19 +214,8 @@ SimdAccel::nextOrDone()
 AddrRangeList
 SimdAccel::getAddrRanges() const
 {
-    // Return the address range for this PIO device
-    AddrRangeList ranges;
-    ranges.push_back(AddrRange(pioAddr, pioAddr + pioSize));
-    return ranges;
-}
-
-TranslationGenPtr
-SimdAccel::translate(Addr vaddr, Addr size)
-{
-    // For SE mode, use the process page table to translate virtual addresses
-    // This allows DMA to work with the process's virtual address space
-    auto process = sys->threads[0]->getProcessPtr();
-    return process->pTable->translateRange(vaddr, size);
+    // BasicPioDevice handles the address range registration
+    return BasicPioDevice::getAddrRanges();
 }
 
 // ========== GEMM Implementation: C[M×N] = A[M×K] × B[K×N] ==========
@@ -249,19 +253,18 @@ SimdAccel::gemmReadA()
     // A is row-major: offset = (row * num_cols + col) * sizeof(element)
     const Addr addr = regSrcA + (gemmI * gemmK + gemmKIdx) * sizeof(uint64_t);
     
-    DPRINTF(SimdAccel, "gemmReadA: Reading A[%d][%d] from addr 0x%x\n", 
+    DPRINTF(SimdAccel, "gemmReadA: Reading A[%d][%d] from addr 0x%lx\n", 
             gemmI, gemmKIdx, addr);
     
-    auto cb = new DmaVirtCallback<uint64_t>(
-        [this](const uint64_t &) { gemmOnReadADone(); });
-    dmaReadVirt(addr, sizeof(uint64_t), cb, bufA.data());
+    auto *cb = new EventFunctionWrapper([this]() { gemmOnReadADone(); }, name());
+    dmaRead(addr, sizeof(uint64_t), cb, bufA.data());
 }
 
 void
 SimdAccel::gemmOnReadADone()
 {
-    std::memcpy(&tmpA, bufA.data(), sizeof(uint64_t));
-    DPRINTF(SimdAccel, "gemmOnReadADone: A[%d][%d]=%d\n", gemmI, gemmKIdx, tmpA);
+    std::memcpy(&tmpA[0], bufA.data(), sizeof(uint64_t));
+    DPRINTF(SimdAccel, "gemmOnReadADone: A[%d][%d]=%lu\n", gemmI, gemmKIdx, tmpA[0]);
     gemmReadB();
 }
 
@@ -272,25 +275,24 @@ SimdAccel::gemmReadB()
     // B is row-major: offset = (row * num_cols + col) * sizeof(element)
     const Addr addr = regSrcB + (gemmKIdx * gemmN + gemmJ) * sizeof(uint64_t);
     
-    DPRINTF(SimdAccel, "gemmReadB: Reading B[%d][%d] from addr 0x%x\n", 
+    DPRINTF(SimdAccel, "gemmReadB: Reading B[%d][%d] from addr 0x%lx\n", 
             gemmKIdx, gemmJ, addr);
     
-    auto cb = new DmaVirtCallback<uint64_t>(
-        [this](const uint64_t &) { gemmOnReadBDone(); });
-    dmaReadVirt(addr, sizeof(uint64_t), cb, bufB.data());
+    auto *cb = new EventFunctionWrapper([this]() { gemmOnReadBDone(); }, name());
+    dmaRead(addr, sizeof(uint64_t), cb, bufB.data());
 }
 
 void
 SimdAccel::gemmOnReadBDone()
 {
-    std::memcpy(&tmpB, bufB.data(), sizeof(uint64_t));
-    DPRINTF(SimdAccel, "gemmOnReadBDone: B[%d][%d]=%d\n", gemmKIdx, gemmJ, tmpB);
+    std::memcpy(&tmpB[0], bufB.data(), sizeof(uint64_t));
+    DPRINTF(SimdAccel, "gemmOnReadBDone: B[%d][%d]=%lu\n", gemmKIdx, gemmJ, tmpB[0]);
     
     // Multiply-accumulate: gemmAccum += A[i][k] * B[k][j]
-    gemmAccum += tmpA * tmpB;
+    gemmAccum += tmpA[0] * tmpB[0];
     
-    DPRINTF(SimdAccel, "gemmOnReadBDone: accum=%d after A*B=%d*%d\n", 
-            gemmAccum, tmpA, tmpB);
+    DPRINTF(SimdAccel, "gemmOnReadBDone: accum=%lu after A*B=%lu*%lu\n", 
+            gemmAccum, tmpA[0], tmpB[0]);
     
     // Move to next k
     gemmKIdx++;
@@ -301,11 +303,11 @@ SimdAccel::gemmOnReadBDone()
     } else {
         // Finished k-loop: dot product for C[i][j] is complete
         // Prepare result for writing
-        tmpR = gemmAccum;
-        std::memcpy(bufR.data(), &tmpR, sizeof(uint64_t));
+        tmpR[0] = gemmAccum;
+        std::memcpy(bufR.data(), &tmpR[0], sizeof(uint64_t));
         
-        DPRINTF(SimdAccel, "gemmOnReadBDone: Completed C[%d][%d]=%d, writing\n", 
-                gemmI, gemmJ, tmpR);
+        DPRINTF(SimdAccel, "gemmOnReadBDone: Completed C[%d][%d]=%lu, writing\n", 
+                gemmI, gemmJ, tmpR[0]);
         
         gemmWriteC();
     }
@@ -318,12 +320,11 @@ SimdAccel::gemmWriteC()
     // C is row-major: offset = (row * num_cols + col) * sizeof(element)
     const Addr addr = regDst + (gemmI * gemmN + gemmJ) * sizeof(uint64_t);
     
-    DPRINTF(SimdAccel, "gemmWriteC: Writing C[%d][%d]=%d to addr 0x%x\n", 
-            gemmI, gemmJ, tmpR, addr);
+    DPRINTF(SimdAccel, "gemmWriteC: Writing C[%d][%d]=%lu to addr 0x%lx\n", 
+            gemmI, gemmJ, tmpR[0], addr);
     
-    auto cb = new DmaVirtCallback<uint64_t>(
-        [this](const uint64_t &) { gemmOnWriteDone(); });
-    dmaWriteVirt(addr, sizeof(uint64_t), cb, bufR.data());
+    auto *cb = new EventFunctionWrapper([this]() { gemmOnWriteDone(); }, name());
+    dmaWrite(addr, sizeof(uint64_t), cb, bufR.data());
 }
 
 void

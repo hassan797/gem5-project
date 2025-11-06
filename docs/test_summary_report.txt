@@ -98,19 +98,19 @@ State Transitions:
   1. Read A[0][0]=1    ✓
   2. Read B[0][0]=1    ✓
   3. Accumulate: 0 + 1×1 = 1 ✓
-
+  
   4. Read A[0][1]=2    ✓
   5. Read B[1][0]=0    ✓
   6. Accumulate: 1 + 2×0 = 1 ✓
-
+  
   7. Read A[0][2]=3    ✓
   8. Read B[2][0]=0    ✓
   9. Accumulate: 1 + 3×0 = 1 ✓
-
+  
   10. Read A[0][3]=4   ✓
   11. Read B[3][0]=0   ✓
   12. Accumulate: 1 + 4×0 = 1 ✓
-
+  
   13. Write C[0][0]=1  ✓
   14. Move to C[0][1]  ✓
 

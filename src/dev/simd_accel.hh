@@ -2,16 +2,17 @@
 #define __DEV_SIMD_ACCEL_HH__
 
 #include <array>
+#include <vector>
 
 #include "base/types.hh"
-#include "dev/dma_virt_device.hh"
+#include "dev/dma_device.hh"
 #include "dev/io_device.hh"
 #include "params/SimdAccel.hh"
 #include "sim/eventq.hh"
 
 namespace gem5 {
 
-class SimdAccel : public DmaVirtDevice
+class SimdAccel : public BasicPioDevice, public DmaDevice
 {
   public:
     SimdAccel(const SimdAccelParams &p);
@@ -20,13 +21,15 @@ class SimdAccel : public DmaVirtDevice
     Tick read(PacketPtr pkt) override;   // MMIO
     Tick write(PacketPtr pkt) override;  // MMIO
     AddrRangeList getAddrRanges() const override;
-    TranslationGenPtr translate(Addr vaddr, Addr size) override;
+    
+    // Resolve ambiguity from multiple inheritance
+    std::string name() const override { return BasicPioDevice::name(); }
 
   private:
-    // PIO parameters (since we don't inherit BasicPioDevice)
-    Addr pioAddr;
-    Addr pioSize;
-    Tick pioDelay;
+
+    // SIMD configuration
+    unsigned numLanes;
+    Tick computeLatency;
 
     // MMIO regs (64-bit)
     Addr     regSrcA   = 0;
@@ -39,9 +42,11 @@ class SimdAccel : public DmaVirtDevice
     uint64_t regDimK   = 0;   // K dimension for GEMM (shared dimension)
     uint64_t regDimN   = 0;   // N dimension for GEMM (columns of B/C)
 
-    // Op state
+    // Op state - SIMD processing
     uint64_t idx = 0;
-    uint64_t tmpA = 0, tmpB = 0, tmpR = 0;
+    std::vector<uint64_t> tmpA;  // Array for SIMD lanes
+    std::vector<uint64_t> tmpB;  // Array for SIMD lanes
+    std::vector<uint64_t> tmpR;  // Array for SIMD lanes
     
     // GEMM state (when opType=1)
     uint64_t gemmM = 0, gemmK = 0, gemmN = 0;  // Matrix dimensions
@@ -49,19 +54,19 @@ class SimdAccel : public DmaVirtDevice
     uint64_t gemmKIdx = 0;                      // Current K accumulation index
     uint64_t gemmAccum = 0;                     // Accumulator for dot product
 
-    // DMA buffers (per-element)
-    std::array<uint8_t, 8> bufA{};
-    std::array<uint8_t, 8> bufB{};
-    std::array<uint8_t, 8> bufR{};
+    // DMA buffers (for multiple elements)
+    std::vector<uint8_t> bufA;  // Sized to numLanes * sizeof(uint64_t)
+    std::vector<uint8_t> bufB;  // Sized to numLanes * sizeof(uint64_t)
+    std::vector<uint8_t> bufR;  // Sized to numLanes * sizeof(uint64_t)
 
-    // Helpers - Element-wise operations
-    void kick();            // start op when CMD.start is written
-    void issueReadA();
-    void onReadADone();
-    void issueReadB();
-    void onReadBDone();
-    void issueWrite();
-    void onWriteDone();
+    // Helpers - Element-wise operations (SIMD)
+    void kick();                        // start op when CMD.start is written
+    void issueReadA();                  // Read batch of A elements
+    void onReadADone(uint64_t batchSize);
+    void issueReadB(uint64_t batchSize);
+    void onReadBDone(uint64_t batchSize);
+    void issueWrite(uint64_t batchSize);
+    void onWriteDone(uint64_t batchSize);
     void nextOrDone();
     
     // Helpers - GEMM operation (C = A × B)
