@@ -6,7 +6,20 @@
     tmpR[0] = tmpA[0] * tmpB[0];
     std::memcpy(bufR.data(), &tmpR[0], sizeof(uint64_t));
     
-    DPRINTF(SimdAccel, "onReadBDone: B[%d]=%lu, result=%lu\n", idx, tmpB[0], tmpR[0]);
+    DPRvoid
+SimdAccel::gemmWriteC()
+{
+    // Write final result C[i][j] back to memory
+    // C is row-major: offset = (row * num_cols + col) * sizeof(element)
+    const Addr addr = regDst + (gemmI * gemmN + gemmJ) * sizeof(uint64_t);
+    
+    DPRINTF(SimdAccel, "gemmWriteC: Writing C[%d][%d]=%lu to addr 0x%lx\n", 
+            gemmI, gemmJ, tmpR[0], addr);
+    
+    auto cb = new DmaVirtCallback<uint64_t>(
+        [this](const uint64_t &) { gemmOnWriteDone(); });
+    dmaWriteVirt(addr, sizeof(uint64_t), cb, bufR.data());
+}l, "onReadBDone: B[%d]=%lu, result=%lu\n", idx, tmpB[0], tmpR[0]);
     issueWrite();, bufA.data(), sizeof(uint64_t));
     DPRINTF(SimdAccel, "onReadADone: A[%d]=%lu\n", idx, tmpA[0]);
     issueReadB();tion (opType=1): C[M×N] = A[M×K] × B[K×N]
@@ -29,8 +42,10 @@
 namespace gem5 {
 
 SimdAccel::SimdAccel(const SimdAccelParams &p)
-    : BasicPioDevice(p, p.pio_size),
-      DmaDevice(p),
+    : DmaVirtDevice(p),
+      pioAddr(p.pio_addr),
+      pioSize(p.pio_size),
+      pioDelay(p.pio_latency),
       numLanes(p.num_lanes),
       computeLatency(p.compute_latency)
 {
@@ -78,16 +93,47 @@ SimdAccel::write(PacketPtr pkt)
     const Addr off = pkt->getAddr() - pioAddr;
     const uint64_t val = pkt->getUintX(ByteOrder::little);
 
+    // Always print MMIO writes to verify instructions are reaching device
+    std::cout << "[SimdAccel] MMIO Write: offset=0x" << std::hex << off 
+              << " value=0x" << val << std::dec << std::endl;
+
     switch (off) {
-      case 0x00: regSrcA = val; break;
-      case 0x08: regSrcB = val; break;
-      case 0x10: regDst  = val; break;
-      case 0x18: regLen  = val; break;
-      case 0x20: regCmd  = val; kick(); break;
-      case 0x30: regOpType = val; break;  // Operation type
-      case 0x38: regDimK = val; break;    // K dimension for GEMM
-      case 0x40: regDimN = val; break;    // N dimension for GEMM
-      default: break;
+      case 0x00: 
+        regSrcA = val; 
+        std::cout << "[SimdAccel] Set regSrcA = 0x" << std::hex << val << std::dec << std::endl;
+        break;
+      case 0x08: 
+        regSrcB = val; 
+        std::cout << "[SimdAccel] Set regSrcB = 0x" << std::hex << val << std::dec << std::endl;
+        break;
+      case 0x10: 
+        regDst  = val; 
+        std::cout << "[SimdAccel] Set regDst = 0x" << std::hex << val << std::dec << std::endl;
+        break;
+      case 0x18: 
+        regLen  = val; 
+        std::cout << "[SimdAccel] Set regLen = " << val << std::endl;
+        break;
+      case 0x20: 
+        regCmd  = val; 
+        std::cout << "[SimdAccel] Set regCmd, calling kick()..." << std::endl;
+        kick(); 
+        break;
+      case 0x30: 
+        regOpType = val; 
+        std::cout << "[SimdAccel] Set regOpType = " << val << std::endl;
+        break;
+      case 0x38: 
+        regDimK = val; 
+        std::cout << "[SimdAccel] Set regDimK = " << val << std::endl;
+        break;
+      case 0x40: 
+        regDimN = val; 
+        std::cout << "[SimdAccel] Set regDimN = " << val << std::endl;
+        break;
+      default: 
+        std::cout << "[SimdAccel] Unknown offset 0x" << std::hex << off << std::dec << std::endl;
+        break;
     }
     pkt->makeResponse();
     return pioDelay;
@@ -96,21 +142,28 @@ SimdAccel::write(PacketPtr pkt)
 void
 SimdAccel::kick()
 {
+    std::cout << "[SimdAccel] kick() called! regCmd=0x" << std::hex << regCmd << std::dec << std::endl;
+    
     if (!(regCmd & 0x1))
         return;
 
     regStatus |= 0x1;      // Set busy flag
     regCmd &= ~0x1ULL;     // Clear start bit
     
+    std::cout << "[SimdAccel] Starting operation: opType=" << regOpType 
+              << " len=" << regLen << std::endl;
+    
     // Dispatch based on operation type
     if (regOpType == 0) {
         // Element-wise multiply operation
         if (regLen == 0) {
             DPRINTF(SimdAccel, "KICK: Invalid length 0 for element-wise operation\n");
+            std::cout << "[SimdAccel] ERROR: Invalid length 0" << std::endl;
             regStatus &= ~0x1ULL;
             return;
         }
         DPRINTF(SimdAccel, "KICK: Starting element-wise multiply with regLen=%d\n", regLen);
+        std::cout << "[SimdAccel] Starting element-wise multiply, len=" << regLen << std::endl;
         idx = 0;
         issueReadA();
         
@@ -148,55 +201,92 @@ SimdAccel::issueReadA()
         nextOrDone();
         return;
     }
+    
+    // Determine batch size: process up to numLanes elements at once
+    uint64_t remaining = regLen - idx;
+    uint64_t batchSize = (remaining < numLanes) ? remaining : numLanes;
+    
     const Addr a = regSrcA + idx * sizeof(uint64_t);
-    DPRINTF(SimdAccel, "issueReadA: reading A[%d] from addr 0x%lx\n", idx, a);
-    auto *cb = new EventFunctionWrapper([this]() { onReadADone(); }, name());
-    dmaRead(a, sizeof(uint64_t), cb, bufA.data());
+    std::cout << "[SimdAccel] BATCHED READ A: idx=" << idx << ", batchSize=" << batchSize 
+              << ", addr=0x" << std::hex << a << std::dec << std::endl;
+    DPRINTF(SimdAccel, "issueReadA: reading %d elements starting at A[%d] from addr 0x%lx\n", 
+            batchSize, idx, a);
+    
+    auto cb = new DmaVirtCallback<uint64_t>(
+        [this, batchSize](const uint64_t &) { onReadADone(batchSize); });
+    dmaReadVirt(a, batchSize * sizeof(uint64_t), cb, bufA.data());
 }
 
 void
-SimdAccel::onReadADone()
+SimdAccel::onReadADone(uint64_t batchSize)
 {
-    std::memcpy(&tmpA[0], bufA.data(), sizeof(uint64_t));
-    DPRINTF(SimdAccel, "onReadADone: A[%d]=%lu\n", idx, tmpA[0]);
-    issueReadB();
+    // Copy all elements from DMA buffer
+    for (uint64_t i = 0; i < batchSize; i++) {
+        std::memcpy(&tmpA[i], bufA.data() + i * sizeof(uint64_t), sizeof(uint64_t));
+        DPRINTF(SimdAccel, "onReadADone: A[%d]=%lu\n", idx + i, tmpA[i]);
+    }
+    issueReadB(batchSize);
 }
 
 void
-SimdAccel::issueReadB()
+SimdAccel::issueReadB(uint64_t batchSize)
 {
     const Addr b = regSrcB + idx * sizeof(uint64_t);
-    auto *cb = new EventFunctionWrapper([this]() { onReadBDone(); }, name());
-    dmaRead(b, sizeof(uint64_t), cb, bufB.data());
+    DPRINTF(SimdAccel, "issueReadB: reading %d elements starting at B[%d] from addr 0x%lx\n",
+            batchSize, idx, b);
+    
+    auto cb = new DmaVirtCallback<uint64_t>(
+        [this, batchSize](const uint64_t &) { onReadBDone(batchSize); });
+    dmaReadVirt(b, batchSize * sizeof(uint64_t), cb, bufB.data());
 }
 
 void
-SimdAccel::onReadBDone()
+SimdAccel::onReadBDone(uint64_t batchSize)
 {
-    std::memcpy(&tmpB[0], bufB.data(), sizeof(uint64_t));
-    tmpR[0] = tmpA[0] * tmpB[0];  // Element-wise multiplication
-    std::memcpy(bufR.data(), &tmpR[0], sizeof(uint64_t));
-    DPRINTF(SimdAccel, "onReadBDone: B[%d]=%lu, result=%lu\n", idx, tmpB[0], tmpR[0]);
-    issueWrite();
+    std::cout << "[SimdAccel] BATCHED COMPUTE: Processing " << batchSize 
+              << " elements in parallel (SIMD lanes)" << std::endl;
+    
+    // Copy all elements from DMA buffer and compute in parallel
+    for (uint64_t i = 0; i < batchSize; i++) {
+        std::memcpy(&tmpB[i], bufB.data() + i * sizeof(uint64_t), sizeof(uint64_t));
+        // Perform SIMD multiply - all lanes compute in parallel
+        tmpR[i] = tmpA[i] * tmpB[i];
+        std::memcpy(bufR.data() + i * sizeof(uint64_t), &tmpR[i], sizeof(uint64_t));
+        DPRINTF(SimdAccel, "onReadBDone: B[%d]=%lu, result=%lu\n", idx + i, tmpB[i], tmpR[i]);
+    }
+    
+    DPRINTF(SimdAccel, "onReadBDone: computed %d elements in parallel, scheduling write after %lu ticks\n", 
+            batchSize, computeLatency);
+    
+    // KEY: All batchSize elements (up to 4) are computed in parallel
+    // So the latency is the SAME whether we process 1 or 4 elements!
+    schedule(new EventFunctionWrapper([this, batchSize]() { issueWrite(batchSize); }, name()), 
+             curTick() + computeLatency);
 }
 
 void
-SimdAccel::issueWrite()
+SimdAccel::issueWrite(uint64_t batchSize)
 {
     const Addr d = regDst + idx * sizeof(uint64_t);
-    DPRINTF(SimdAccel, "issueWrite: writing C[%d]=%lu to address 0x%lx\n", idx, tmpR[0], d);
-    auto *cb = new EventFunctionWrapper([this]() { onWriteDone(); }, name());
-    dmaWrite(d, sizeof(uint64_t), cb, bufR.data());
+    DPRINTF(SimdAccel, "issueWrite: writing %d elements starting at C[%d] to address 0x%lx\n", 
+            batchSize, idx, d);
+    
+    auto cb = new DmaVirtCallback<uint64_t>(
+        [this, batchSize](const uint64_t &) { onWriteDone(batchSize); });
+    dmaWriteVirt(d, batchSize * sizeof(uint64_t), cb, bufR.data());
 }
 
 void
-SimdAccel::onWriteDone()
+SimdAccel::onWriteDone(uint64_t batchSize)
 {
-    DPRINTF(SimdAccel, "onWriteDone: completed element %d\n", idx);
-    idx++;
+    DPRINTF(SimdAccel, "onWriteDone: completed %d elements [%d-%d]\n", 
+            batchSize, idx, idx + batchSize - 1);
+    
+    // Advance index by the number of elements we just processed
+    idx += batchSize;
     
     if (idx < regLen) {
-        DPRINTF(SimdAccel, "onWriteDone: continuing to next element\n");
+        DPRINTF(SimdAccel, "onWriteDone: continuing with next batch\n");
         issueReadA();
     } else {
         DPRINTF(SimdAccel, "onWriteDone: all elements done, finishing\n");
@@ -214,8 +304,19 @@ SimdAccel::nextOrDone()
 AddrRangeList
 SimdAccel::getAddrRanges() const
 {
-    // BasicPioDevice handles the address range registration
-    return BasicPioDevice::getAddrRanges();
+    // Return the address range for this PIO device
+    AddrRangeList ranges;
+    ranges.push_back(AddrRange(pioAddr, pioAddr + pioSize));
+    return ranges;
+}
+
+TranslationGenPtr
+SimdAccel::translate(Addr vaddr, Addr size)
+{
+    // For SE mode, use the process page table to translate virtual addresses
+    // This allows DMA to work with the process's virtual address space
+    auto process = sys->threads[0]->getProcessPtr();
+    return process->pTable->translateRange(vaddr, size);
 }
 
 // ========== GEMM Implementation: C[M×N] = A[M×K] × B[K×N] ==========
@@ -256,8 +357,9 @@ SimdAccel::gemmReadA()
     DPRINTF(SimdAccel, "gemmReadA: Reading A[%d][%d] from addr 0x%lx\n", 
             gemmI, gemmKIdx, addr);
     
-    auto *cb = new EventFunctionWrapper([this]() { gemmOnReadADone(); }, name());
-    dmaRead(addr, sizeof(uint64_t), cb, bufA.data());
+    auto cb = new DmaVirtCallback<uint64_t>(
+        [this](const uint64_t &) { gemmOnReadADone(); });
+    dmaReadVirt(addr, sizeof(uint64_t), cb, bufA.data());
 }
 
 void
@@ -278,8 +380,9 @@ SimdAccel::gemmReadB()
     DPRINTF(SimdAccel, "gemmReadB: Reading B[%d][%d] from addr 0x%lx\n", 
             gemmKIdx, gemmJ, addr);
     
-    auto *cb = new EventFunctionWrapper([this]() { gemmOnReadBDone(); }, name());
-    dmaRead(addr, sizeof(uint64_t), cb, bufB.data());
+    auto cb = new DmaVirtCallback<uint64_t>(
+        [this](const uint64_t &) { gemmOnReadBDone(); });
+    dmaReadVirt(addr, sizeof(uint64_t), cb, bufB.data());
 }
 
 void
@@ -289,11 +392,20 @@ SimdAccel::gemmOnReadBDone()
     DPRINTF(SimdAccel, "gemmOnReadBDone: B[%d][%d]=%lu\n", gemmKIdx, gemmJ, tmpB[0]);
     
     // Multiply-accumulate: gemmAccum += A[i][k] * B[k][j]
+    // This computation takes computeLatency ticks (same for 1 or numLanes elements)
     gemmAccum += tmpA[0] * tmpB[0];
     
-    DPRINTF(SimdAccel, "gemmOnReadBDone: accum=%lu after A*B=%lu*%lu\n", 
-            gemmAccum, tmpA[0], tmpB[0]);
+    DPRINTF(SimdAccel, "gemmOnReadBDone: accum=%lu after A*B=%lu*%lu, delaying %lu ticks for compute\n", 
+            gemmAccum, tmpA[0], tmpB[0], computeLatency);
     
+    // Schedule next step after compute latency
+    schedule(new EventFunctionWrapper([this]() { gemmComputeDone(); }, name()), 
+             curTick() + computeLatency);
+}
+
+void
+SimdAccel::gemmComputeDone()
+{
     // Move to next k
     gemmKIdx++;
     

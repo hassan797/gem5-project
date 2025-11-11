@@ -5,14 +5,13 @@
 #include <vector>
 
 #include "base/types.hh"
-#include "dev/dma_device.hh"
-#include "dev/io_device.hh"
+#include "dev/dma_virt_device.hh"
 #include "params/SimdAccel.hh"
 #include "sim/eventq.hh"
 
 namespace gem5 {
 
-class SimdAccel : public BasicPioDevice, public DmaDevice
+class SimdAccel : public DmaVirtDevice
 {
   public:
     SimdAccel(const SimdAccelParams &p);
@@ -21,11 +20,14 @@ class SimdAccel : public BasicPioDevice, public DmaDevice
     Tick read(PacketPtr pkt) override;   // MMIO
     Tick write(PacketPtr pkt) override;  // MMIO
     AddrRangeList getAddrRanges() const override;
-    
-    // Resolve ambiguity from multiple inheritance
-    std::string name() const override { return BasicPioDevice::name(); }
+    TranslationGenPtr translate(Addr vaddr, Addr size) override;
 
   private:
+
+    // PIO registers
+    Addr pioAddr;
+    Addr pioSize;
+    Tick pioDelay;
 
     // SIMD configuration
     unsigned numLanes;
@@ -59,7 +61,7 @@ class SimdAccel : public BasicPioDevice, public DmaDevice
     std::vector<uint8_t> bufB;  // Sized to numLanes * sizeof(uint64_t)
     std::vector<uint8_t> bufR;  // Sized to numLanes * sizeof(uint64_t)
 
-    // Helpers - Element-wise operations (SIMD)
+    // Helpers - Element-wise operations (SIMD with batching)
     void kick();                        // start op when CMD.start is written
     void issueReadA();                  // Read batch of A elements
     void onReadADone(uint64_t batchSize);
@@ -75,6 +77,7 @@ class SimdAccel : public BasicPioDevice, public DmaDevice
     void gemmOnReadADone();
     void gemmReadB();       // Read B[k][j]
     void gemmOnReadBDone();
+    void gemmComputeDone(); // After compute latency
     void gemmWriteC();      // Write C[i][j]
     void gemmOnWriteDone();
 };
