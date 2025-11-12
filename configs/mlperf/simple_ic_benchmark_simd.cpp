@@ -38,15 +38,15 @@ static inline void xcop_dimn(uint64_t n) {
 }
 
 static inline void xcop_srca(uint64_t a) {
-    asm volatile(".insn r 0x0B,0x0,0x01, x0,%0,x0" :: "r"(a) : "memory");
+    asm volatile(".insn s 0x0B,0x0,%0,0(zero)" :: "r"(a) : "memory");
 }
 
 static inline void xcop_srcb(uint64_t b) {
-    asm volatile(".insn r 0x0B,0x1,0x01, x0,%0,x0" :: "r"(b) : "memory");
+    asm volatile(".insn s 0x0B,0x1,%0,0(zero)" :: "r"(b) : "memory");
 }
 
 static inline void xcop_dst(uint64_t d) {
-    asm volatile(".insn r 0x0B,0x2,0x01, x0,%0,x0" :: "r"(d) : "memory");
+    asm volatile(".insn s 0x0B,0x2,%0,0(zero)" :: "r"(d) : "memory");
 }
 
 static inline void xcop_len(uint64_t m) {
@@ -190,22 +190,60 @@ struct SimpleModel {
         delete[] conv1_output;
         
         // ===== Stage 3: Fully Connected layer =====
-        // This is a good candidate for GEMM if we structure it as matrix multiply
-        // FC: [10 x 8192] * [8192 x 1] = [10 x 1]
-        // But GEMM accelerator expects: C[MxN] = A[MxK] * B[KxN]
-        // We can do: C[10x1] = W[10x8192] * X[8192x1]
+        // GEMM accelerator: C[MxN] = A[MxK] * B[KxN]
+        // FC: C[10x1] = W[10x8192] * X[8192x1]
+        // M=10 (outputs), K=8192 (inputs), N=1 (batch size)
         
-        printf("  FC: 10 outputs (dot products)...\n");
+        printf("  FC: 10 outputs using SIMD GEMM (4-way batching)...\n");
         
-        // For simplicity, we'll keep this as scalar for now
-        // In a real implementation, you could structure this as GEMM
-        for (int i = 0; i < kCategoryCount; i++) {
-            float sum = 0.0f;
-            for (int j = 0; j < 16 * 16 * 32; j++) {
-                sum += pool1_output[j] * 0.001f;  // Simulated weight
-            }
-            output_buffer[i] = sum;
+        // Allocate weight matrix W[10 x 8192] and input vector X[8192 x 1]
+        const int FC_M = kCategoryCount;        // 10 outputs
+        const int FC_K = 16 * 16 * 32;          // 8192 inputs
+        const int FC_N = 1;                     // batch size 1
+        
+        // For testing: use uint64_t instead of float for SIMD accelerator
+        uint64_t* fc_weights = new uint64_t[FC_M * FC_K];
+        uint64_t* fc_input = new uint64_t[FC_K * FC_N];
+        uint64_t* fc_output = new uint64_t[FC_M * FC_N];
+        
+        // Convert pool1_output (float) to uint64_t for GEMM
+        // In real implementation, weights would be pre-quantized
+        for (int i = 0; i < FC_K; i++) {
+            fc_input[i] = (uint64_t)(pool1_output[i] * 1000.0f);  // Scale up
         }
+        
+        // Initialize weight matrix (simulated weights)
+        for (int i = 0; i < FC_M * FC_K; i++) {
+            fc_weights[i] = 1;  // Simplified: all weights = 1
+        }
+        
+        // Configure SIMD accelerator for GEMM operation
+        xcop_optype(1);              // opType = 1 (GEMM)
+        xcop_len(FC_M);              // M dimension (rows of A/C)
+        xcop_dimk(FC_K);             // K dimension (cols of A, rows of B)
+        xcop_dimn(FC_N);             // N dimension (cols of B/C)
+        xcop_srca(reinterpret_cast<uintptr_t>(fc_weights));  // A matrix address
+        xcop_srcb(reinterpret_cast<uintptr_t>(fc_input));    // B matrix address
+        xcop_dst(reinterpret_cast<uintptr_t>(fc_output));    // C matrix address
+        
+        printf("    Launching GEMM: C[%dx%d] = A[%dx%d] * B[%dx%d]\n",
+               FC_M, FC_N, FC_M, FC_K, FC_K, FC_N);
+        printf("    Expected to process K=%d in batches of 4 (4-way SIMD)\n", FC_K);
+        
+        xcop_kick();                 // Start GEMM operation
+        xcop_wait();                 // Wait for completion
+        
+        printf("    GEMM complete! Converting results...\n");
+        
+        // Convert uint64_t output back to float
+        for (int i = 0; i < FC_M; i++) {
+            output_buffer[i] = (float)fc_output[i] / 1000.0f;  // Scale down
+        }
+        
+        // Cleanup
+        delete[] fc_weights;
+        delete[] fc_input;
+        delete[] fc_output;
         
         delete[] pool1_output;
         

@@ -96,6 +96,11 @@ def create_system(args):
     # Interrupt controller
     system.cpu.createInterruptController()
     
+    # Configure MMIO as uncacheable (for SIMD accelerator)
+    system.cpu.mmu.pma_checker.uncacheable = [
+        AddrRange(0x40000000, 0x40001000)
+    ]
+    
     # ========== SIMD Accelerator ==========
     # Create the SIMD accelerator device
     system.simd = SimdAccel(
@@ -146,7 +151,7 @@ def create_system(args):
     print(f"\nBinary: {args.binary}")
     print(f"Arguments: {args.num_runs} runs\n")
     
-    return system
+    return system, process
 
 def main():
     parser = argparse.ArgumentParser(
@@ -171,7 +176,7 @@ def main():
     args = parser.parse_args()
     
     # Create system
-    system = create_system(args)
+    system, process = create_system(args)
     
     # Create root
     root = Root(full_system=False, system=system)
@@ -179,6 +184,11 @@ def main():
     # Instantiate
     print("Instantiating system...")
     m5.instantiate()
+    
+    # Map MMIO region in process address space (required for SE mode)
+    proc_ptr = process.getCCObject()
+    proc_ptr.map(0x40000000, 0x40000000, 0x1000, False)
+    print("MMIO region mapped: 0x40000000-0x40001000")
     
     print("\n" + "=" * 70)
     print("Starting simulation...")
