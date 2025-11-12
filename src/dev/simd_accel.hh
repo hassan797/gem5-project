@@ -49,7 +49,7 @@ class SimdAccel : public DmaVirtDevice
     std::vector<uint64_t> tmpA;  // Array for SIMD lanes
     std::vector<uint64_t> tmpB;  // Array for SIMD lanes
     std::vector<uint64_t> tmpR;  // Array for SIMD lanes
-    
+
     // GEMM state (when opType=1)
     uint64_t gemmM = 0, gemmK = 0, gemmN = 0;  // Matrix dimensions
     uint64_t gemmI = 0, gemmJ = 0;              // Current output position (i,j)
@@ -70,16 +70,21 @@ class SimdAccel : public DmaVirtDevice
     void issueWrite(uint64_t batchSize);
     void onWriteDone(uint64_t batchSize);
     void nextOrDone();
-    
-    // Helpers - GEMM operation (C = A × B)
-    void kickGemm();        // start GEMM operation
-    void gemmReadA();       // Read A[i][k]
-    void gemmOnReadADone();
-    void gemmReadB();       // Read B[k][j]
-    void gemmOnReadBDone();
-    void gemmComputeDone(); // After compute latency
-    void gemmWriteC();      // Write C[i][j]
+
+    // Helpers - GEMM operation (C = A × B) with 4-way batching
+    void kickGemm();                      // start GEMM operation
+    void gemmReadA();                     // Read batch of A[i][k:k+batch]
+    void gemmOnReadADone(uint64_t batchSize);
+    void gemmReadB(uint64_t batchSize);   // Read batch of B[k:k+batch][j] (strided)
+    void gemmReadBElement(uint64_t totalBatch); // Helper for strided B reads
+    void gemmOnReadBDone(uint64_t batchSize);
+    void gemmComputeDone(uint64_t batchSize); // After compute latency
+    void gemmWriteC();                    // Write C[i][j]
     void gemmOnWriteDone();
+
+    // GEMM batching state
+    uint64_t gemmBatchRemaining;  // How many B elements left to read in current batch
+    uint64_t gemmBatchCurrent;    // Current index within batch
 };
 
 } // namespace gem5
