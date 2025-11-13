@@ -107,7 +107,9 @@ def create_system(args):
         pio_addr=0x40000000,     # MMIO base address
         pio_size=0x1000,         # 4KB MMIO region
         num_lanes=4,             # Process 4 elements per cycle
-        compute_latency="10ns"   # Latency per SIMD operation
+        # Set compute latency for one 4-element SIMD batch.
+        # 4 cycles @ 2GHz => 2ns total latency per batch
+        compute_latency="2ns"    # Latency per SIMD operation (batch)
     )
     
     # Connect SIMD accelerator
