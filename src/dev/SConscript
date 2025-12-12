@@ -35,9 +35,11 @@ Source('isa_fake.cc')
 Source('dma_device.cc')
 Source('dma_virt_device.cc')
 Source('simd_accel.cc')
+Source('systolic_accel.cc')
 
 # Register the new SimdAccel SimObject so params headers are generated
 SimObject('SimdAccel.py', sim_objects=['SimdAccel'])
+SimObject('SystolicAccel.py', sim_objects=['SystolicAccel'])
 
 SimObject('IntPin.py', sim_objects=[])
 SimObject('ResetPort.py', sim_objects=[])
@@ -46,6 +48,7 @@ DebugFlag('IntPin')
 DebugFlag('IsaFake')
 DebugFlag('DMA')
 DebugFlag('SimdAccel')
+DebugFlag('SystolicAccel')
 
 SimObject('Platform.py', sim_objects=['Platform'])
 Source('platform.cc')
