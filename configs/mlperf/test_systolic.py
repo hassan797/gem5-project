@@ -97,10 +97,19 @@ def create_system(args):
     # Interrupt controller
     system.cpu.createInterruptController()
     
+    # X86 requires connecting interrupt ports
+    if hasattr(system.cpu, 'interrupts'):
+        for i in range(len(system.cpu.interrupts)):
+            system.cpu.interrupts[i].pio = system.membus.mem_side_ports
+            system.cpu.interrupts[i].int_requestor = system.membus.cpu_side_ports
+            system.cpu.interrupts[i].int_responder = system.membus.mem_side_ports
+    
     # Configure MMIO as uncacheable (for systolic accelerator)
-    system.cpu.mmu.pma_checker.uncacheable = [
-        AddrRange(0x50000000, 0x50001000)  # Different address than SIMD
-    ]
+    # Only RISC-V has PMA checker
+    if hasattr(system.cpu.mmu, 'pma_checker'):
+        system.cpu.mmu.pma_checker.uncacheable = [
+            AddrRange(0x50000000, 0x50001000)  # Different address than SIMD
+        ]
     
     # ========== Systolic Array Accelerator ==========
     # Create the systolic array accelerator device

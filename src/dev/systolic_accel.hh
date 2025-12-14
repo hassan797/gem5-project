@@ -114,6 +114,7 @@ class SystolicAccel : public DmaVirtDevice
     uint64_t rowIdx;       // Current row being processed in tile
     uint64_t colIdx;       // Current column being processed in tile
     uint64_t kIdx;         // Current K step
+    uint64_t writeRowIdx;  // Current row being written back (for C tile)
     
     // DMA buffers
     std::vector<uint8_t> bufWeights;   // Buffer for loading weights

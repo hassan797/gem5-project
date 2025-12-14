@@ -336,7 +336,7 @@ SystolicAccel::startCTileWrite()
     std::cout << "[SystolicAccel] Writing results tile (" << tileI << "," << tileJ 
               << "), size=" << mTile << "×" << nTile << std::endl;
     
-    // Collect results from PEs
+    // Collect results from PEs into buffer
     for (unsigned i = 0; i < mTile; i++) {
         for (unsigned j = 0; j < nTile; j++) {
             uint64_t result = peArray[i][j].getResult();
@@ -350,33 +350,53 @@ SystolicAccel::startCTileWrite()
         }
     }
     
-    // Write C[tileI*arrayRows : tileI*arrayRows+mTile][tileJ*arrayCols : tileJ*arrayCols+nTile]
-    uint64_t rowStart = tileI * arrayRows;
+    // Start writing row-by-row (to handle non-contiguous memory layout)
+    writeRowIdx = 0;
+    currentState = WaitDrain;
+    
+    // Write first row
+    uint64_t rowStart = tileI * arrayRows + writeRowIdx;
     uint64_t colStart = tileJ * arrayCols;
-    
-    // C is M×N, row-major: C[m][n] = C_base + (m*N + n)*8
     Addr addr = regMatC + (rowStart * regDimN + colStart) * sizeof(uint64_t);
-    uint64_t writeSize = mTile * nTile * sizeof(uint64_t);
+    uint64_t rowSize = nTile * sizeof(uint64_t);
     
-    std::cout << "[WriteTile] Writing to addr=0x" << std::hex << addr << std::dec 
-              << ", size=" << writeSize << " bytes" << std::endl;
-    std::cout << "[WriteTile] First 4 values: bufCTile[0]=" << *((uint64_t*)bufCTile.data())
-              << ", [1]=" << *((uint64_t*)(bufCTile.data() + 8))
-              << ", [2]=" << *((uint64_t*)(bufCTile.data() + 16))
-              << ", [3]=" << *((uint64_t*)(bufCTile.data() + 24)) << std::endl;
+    std::cout << "[WriteTile] Writing row " << writeRowIdx << " to addr=0x" 
+              << std::hex << addr << std::dec << ", size=" << rowSize << " bytes" << std::endl;
     
     auto cb = new DmaVirtCallback<uint64_t>(
         [this](const uint64_t &) { onCTileWriteDone(); });
     
-    currentState = WaitDrain;
-    dmaWriteVirt(addr, writeSize, cb, bufCTile.data());
+    dmaWriteVirt(addr, rowSize, cb, bufCTile.data() + writeRowIdx * nTile * sizeof(uint64_t));
 }
 
 void
 SystolicAccel::onCTileWriteDone()
 {
-    std::cout << "[WriteTile] DMA write completed for tile (" << tileI << "," << tileJ << ")" << std::endl;
-    nextTile();
+    uint64_t mTile = getCurrentMTileSize();
+    uint64_t nTile = getCurrentNTileSize();
+    
+    writeRowIdx++;
+    
+    // Check if we have more rows to write
+    if (writeRowIdx < mTile) {
+        // Write next row
+        uint64_t rowStart = tileI * arrayRows + writeRowIdx;
+        uint64_t colStart = tileJ * arrayCols;
+        Addr addr = regMatC + (rowStart * regDimN + colStart) * sizeof(uint64_t);
+        uint64_t rowSize = nTile * sizeof(uint64_t);
+        
+        std::cout << "[WriteTile] Writing row " << writeRowIdx << " to addr=0x" 
+                  << std::hex << addr << std::dec << ", size=" << rowSize << " bytes" << std::endl;
+        
+        auto cb = new DmaVirtCallback<uint64_t>(
+            [this](const uint64_t &) { onCTileWriteDone(); });
+        
+        dmaWriteVirt(addr, rowSize, cb, bufCTile.data() + writeRowIdx * nTile * sizeof(uint64_t));
+    } else {
+        // All rows written
+        std::cout << "[WriteTile] DMA write completed for tile (" << tileI << "," << tileJ << ")" << std::endl;
+        nextTile();
+    }
 }
 
 void

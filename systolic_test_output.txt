@@ -1,0 +1,37 @@
+warn: Base 10 memory/cache size 512MB will be cast to base 2 size 512MiB.
+Global frequency set at 1000000000000 ticks per second
+warn: No dot file generated. Please install pydot to generate the dot file and pdf.
+src/mem/dram_interface.cc:690: warn: DRAM device capacity (8192 Mbytes) does not match the address range assigned (512 Mbytes)
+src/base/statistics.hh:279: warn: One of the stats is a legacy stat. Legacy stat is a stat that does not belong to any statistics::Group. Legacy stat is deprecated.
+[SystolicAccel] Created 4×4 PE array, MAC latency=10000 ticks
+system.remote_gdb: Listening for connections on port 7000
+src/arch/x86/interrupts.cc:330: panic: panic condition !intRequestPort.isConnected() occurred: Int port not connected to anything!
+Memory Usage: 645212 KBytes
+Program aborted at tick 0
+--- BEGIN LIBC BACKTRACE ---
+./build/X86/gem5.opt(_ZN4gem515print_backtraceEv+0x30)[0x56bd26c4f580]
+./build/X86/gem5.opt(_ZN4gem512abortHandlerEi+0x4c)[0x56bd26c771ec]
+/lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7ab4c1e45330]
+/lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x7ab4c1e9eb2c]
+/lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x7ab4c1e4527e]
+/lib/x86_64-linux-gnu/libc.so.6(abort+0xdf)[0x7ab4c1e288ff]
+./build/X86/gem5.opt(+0xa6bc55)[0x56bd253b1c55]
+./build/X86/gem5.opt(_ZN4gem56X86ISA10Interrupts4initEv+0x178)[0x56bd260f7f08]
+./build/X86/gem5.opt(+0xd8a051)[0x56bd256d0051]
+./build/X86/gem5.opt(+0xaa8f6e)[0x56bd253eef6e]
+/lib/x86_64-linux-gnu/libpython3.12.so.1.0(+0x1df4b8)[0x7ab4c2ddf4b8]
+/lib/x86_64-linux-gnu/libpython3.12.so.1.0(_PyObject_MakeTpCall+0x8f)[0x7ab4c2d827df]
+/lib/x86_64-linux-gnu/libpython3.12.so.1.0(_PyEval_EvalFrameDefault+0x40ee)[0x7ab4c2d1d5ee]
+/lib/x86_64-linux-gnu/libpython3.12.so.1.0(PyEval_EvalCode+0x20f)[0x7ab4c2ea091f]
+/lib/x86_64-linux-gnu/libpython3.12.so.1.0(+0x29c8b0)[0x7ab4c2e9c8b0]
+/lib/x86_64-linux-gnu/libpython3.12.so.1.0(+0x1dfadc)[0x7ab4c2ddfadc]
+/lib/x86_64-linux-gnu/libpython3.12.so.1.0(PyObject_Vectorcall+0x5c)[0x7ab4c2d82b2c]
+/lib/x86_64-linux-gnu/libpython3.12.so.1.0(_PyEval_EvalFrameDefault+0x40ee)[0x7ab4c2d1d5ee]
+./build/X86/gem5.opt(+0xd55e40)[0x56bd2569be40]
+./build/X86/gem5.opt(main+0x225)[0x56bd253ad235]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7ab4c1e2a1ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7ab4c1e2a28b]
+./build/X86/gem5.opt(_start+0x25)[0x56bd253b09d5]
+--- END LIBC BACKTRACE ---
+For more info on how to address this issue, please visit https://www.gem5.org/documentation/general_docs/common-errors/ 
+
