@@ -14,3 +14,4 @@ class SystolicAccel(DmaVirtDevice):
     array_rows = Param.Unsigned(4, "Number of rows in PE array")
     array_cols = Param.Unsigned(4, "Number of columns in PE array")
     mac_latency = Param.Latency('10ns', "Latency for parallel MAC operation across all PEs")
+    k_tile_batch = Param.Unsigned(16, "Number of K-tiles to load per DMA (reduces overhead)")

@@ -24,12 +24,14 @@ SystolicAccel::SystolicAccel(const SystolicAccelParams &p)
       pioDelay(p.pio_latency),
       arrayRows(p.array_rows),
       arrayCols(p.array_cols),
+      kTileBatch(p.k_tile_batch),
       macLatency(p.mac_latency),
       regMatA(0), regMatB(0), regMatC(0),
       regDimM(0), regDimK(0), regDimN(0),
       regCmd(0), regStatus(0),
       currentState(Idle),
       tileI(0), tileJ(0), tileK(0),
+      kBatchStart(0), kBatchSize(0), kBatchOffset(0),
       rowIdx(0), colIdx(0), kIdx(0)
 {
     // Initialize PE array
@@ -38,13 +40,14 @@ SystolicAccel::SystolicAccel(const SystolicAccelParams &p)
         peArray[i].resize(arrayCols);
     }
     
-    // Allocate DMA buffers (max tile size)
-    bufWeights.resize(arrayRows * arrayCols * sizeof(uint64_t));
+    // Allocate DMA buffers (batched for multiple K-tiles)
+    bufWeights.resize(arrayRows * arrayCols * kTileBatch * sizeof(uint64_t));
     bufARow.resize(arrayRows * sizeof(uint64_t));  // K elements for one row of A
     bufCTile.resize(arrayRows * arrayCols * sizeof(uint64_t));
     
     std::cout << "[SystolicAccel] Created " << arrayRows << "×" << arrayCols 
-              << " PE array, MAC latency=" << macLatency << " ticks" << std::endl;
+              << " PE array, MAC latency=" << macLatency << " ticks, K-tile batch=" 
+              << kTileBatch << std::endl;
 }
 
 void
@@ -147,24 +150,34 @@ SystolicAccel::startWeightLoad()
 {
     currentState = LoadWeights;
     
-    uint64_t kTile = getCurrentKTileSize();
+    // Calculate which batch of K-tiles we're loading
+    // kBatchStart is the starting K-tile index for this batch
+    kBatchStart = tileK;
+    
+    // How many K-tiles remain?
+    uint64_t totalKTiles = (regDimK + arrayRows - 1) / arrayRows;
+    uint64_t kTilesRemaining = totalKTiles - kBatchStart;
+    
+    // Load min(kTileBatch, remaining K-tiles)
+    kBatchSize = std::min((uint64_t)kTileBatch, kTilesRemaining);
+    kBatchOffset = 0;
+    
     uint64_t nTile = getCurrentNTileSize();
     
-    std::cout << "[SystolicAccel] Loading weights tile (" << tileI << "," << tileJ 
-              << "," << tileK << "), size=" << kTile << "×" << nTile << std::endl;
-    
-    // Load entire B tile: B[kStart:kStart+kTile][nStart:nStart+nTile]
-    // This is kTile rows × nTile columns
-    // We need to load this row by row since B is row-major
-    
-    uint64_t kStart = tileK * arrayRows;
+    // Load batched K-tiles: B[kBatchStart*arrayRows : (kBatchStart+kBatchSize)*arrayRows][nStart:nStart+nTile]
+    uint64_t kStart = kBatchStart * arrayRows;
     uint64_t nStart = tileJ * arrayCols;
+    uint64_t kElements = kBatchSize * arrayRows;  // Total K elements in this batch
     
-    // Load first row of the tile
+    // std::cout << "[SystolicAccel] Loading weight batch: K-tiles [" << kBatchStart 
+    //           << ":" << (kBatchStart + kBatchSize) << "], " << kElements << "×" << nTile 
+    //           << " elements" << std::endl;
+    
+    // Load first row of the batch
     Addr addr = regMatB + (kStart * regDimN + nStart) * sizeof(uint64_t);
     uint64_t loadSize = nTile * sizeof(uint64_t);
     
-    colIdx = 0;  // Track which k-row of B we've loaded
+    colIdx = 0;  // Track which k-row we've loaded
     
     auto cb = new DmaVirtCallback<uint64_t>(
         [this](const uint64_t &) { onBRowLoaded(); });
@@ -177,16 +190,16 @@ SystolicAccel::startWeightLoad()
 void
 SystolicAccel::onBRowLoaded()
 {
-    uint64_t kTile = getCurrentKTileSize();
     uint64_t nTile = getCurrentNTileSize();
+    uint64_t kElements = kBatchSize * arrayRows;  // Total K rows in this batch
     
-    std::cout << "[SystolicAccel] Loaded B row " << colIdx << " of " << kTile << std::endl;
+    // std::cout << "[SystolicAccel] Loaded B row " << colIdx << " of " << kElements << std::endl;
     
-    colIdx++;  // Move to next row of B tile
+    colIdx++;  // Move to next row of B batch
     
-    if (colIdx < kTile) {
-        // Load next row of B
-        uint64_t kStart = tileK * arrayRows;
+    if (colIdx < kElements) {
+        // Load next row of B batch
+        uint64_t kStart = kBatchStart * arrayRows;
         uint64_t nStart = tileJ * arrayCols;
         Addr addr = regMatB + ((kStart + colIdx) * regDimN + nStart) * sizeof(uint64_t);
         uint64_t loadSize = nTile * sizeof(uint64_t);
@@ -194,13 +207,13 @@ SystolicAccel::onBRowLoaded()
         auto cb = new DmaVirtCallback<uint64_t>(
             [this](const uint64_t &) { onBRowLoaded(); });
         
-        // Load into correct position: row colIdx of tile
+        // Load into correct position: row colIdx of batch
         // Each row is nTile elements wide
         uint8_t *dest = bufWeights.data() + (colIdx * nTile * sizeof(uint64_t));
         dmaReadVirt(addr, loadSize, cb, dest);
     } else {
-        // All B rows loaded
-        std::cout << "[SystolicAccel] B tile fully loaded (" << kTile << "×" << nTile << " elements)" << std::endl;
+        // All B rows for this batch loaded
+        // std::cout << "[SystolicAccel] B batch fully loaded (" << kElements << "×" << nTile << " elements)" << std::endl;
         onWeightLoadDone();
     }
 }
@@ -208,10 +221,8 @@ SystolicAccel::onBRowLoaded()
 void
 SystolicAccel::onWeightLoadDone()
 {
-    uint64_t nTile = getCurrentNTileSize();
-    
-    // B tile is now fully loaded in bufWeights
-    // bufWeights contains kTile × nTile elements in row-major order
+    // B batch is now fully loaded in bufWeights
+    // bufWeights contains (kBatchSize * arrayRows) × nTile elements in row-major order
     
     // Reset accumulators at start of new output tile
     if (tileK == 0) {
@@ -222,9 +233,10 @@ SystolicAccel::onWeightLoadDone()
         }
     }
     
-    std::cout << "[SystolicAccel] B tile loaded, starting row processing" << std::endl;
+    // std::cout << "[SystolicAccel] B batch loaded, starting row processing" << std::endl;
     
-    // Start streaming A rows
+    // Start processing first K-tile in the batch
+    kBatchOffset = 0;
     rowIdx = 0;
     startARowLoad();
 }
@@ -233,10 +245,16 @@ void
 SystolicAccel::startARowLoad()
 {
     if (rowIdx >= getCurrentMTileSize()) {
-        // Done with this tile, move to next K tile or finish
+        // Done with all rows for this K-tile in batch
+        kBatchOffset++;
         tileK++;
-        if (tileK * arrayRows < regDimK) {
-            // More K tiles to accumulate
+        
+        if (kBatchOffset < kBatchSize) {
+            // More K-tiles in current batch to process
+            rowIdx = 0;
+            startARowLoad();
+        } else if (tileK * arrayRows < regDimK) {
+            // Finished batch, need to load next batch
             startWeightLoad();
         } else {
             // Finished all K tiles, write results
@@ -247,9 +265,9 @@ SystolicAccel::startARowLoad()
     
     currentState = StreamCompute;
     
-    // Load A[tileI*arrayRows + rowIdx][tileK*arrayRows : tileK*arrayRows + kTile]
+    // Load A[tileI*arrayRows + rowIdx][(kBatchStart+kBatchOffset)*arrayRows : (kBatchStart+kBatchOffset+1)*arrayRows]
     uint64_t rowGlobal = tileI * arrayRows + rowIdx;
-    uint64_t kStart = tileK * arrayRows;
+    uint64_t kStart = (kBatchStart + kBatchOffset) * arrayRows;
     uint64_t kTile = getCurrentKTileSize();
     
     // A is M×K, row-major: A[m][k] = A_base + (m*K + k)*8
@@ -278,38 +296,40 @@ SystolicAccel::performCompute()
     
     // For this row of A, compute: C[row][j] += sum_k A[row][k] * B[k][j]
     // bufARow contains: A[row][kStart], A[row][kStart+1], ..., A[row][kStart+kTile-1]
-    // bufWeights contains: B tile in row-major order
-    //   B[kStart][nStart:nStart+nTile]
-    //   B[kStart+1][nStart:nStart+nTile]
-    //   ...
-    //   B[kStart+kTile-1][nStart:nStart+nTile]
+    // bufWeights contains: Batched B data in row-major order
+    //   The current K-tile data starts at offset (kBatchOffset * arrayRows * nTile)
     
-    std::cout << "[SystolicAccel] performCompute: row=" << rowIdx 
-              << ", kTile=" << kTile << ", nTile=" << nTile << std::endl;
+    // std::cout << "[SystolicAccel] performCompute: row=" << rowIdx 
+    //           << ", kBatchOffset=" << kBatchOffset << ", kTile=" << kTile << ", nTile=" << nTile << std::endl;
+    
+    // Offset to current K-tile within the batched buffer
+    uint64_t bufferOffset = kBatchOffset * arrayRows * nTile;
     
     for (unsigned k = 0; k < kTile; k++) {
         uint64_t aValue;
         std::memcpy(&aValue, bufARow.data() + k * sizeof(uint64_t), sizeof(uint64_t));
         
         // For this k, multiply with B[kStart+k][nStart:nStart+nTile]
-        // These B values are at bufWeights[k * nTile : (k+1) * nTile]
+        // These B values are at bufWeights[bufferOffset + k * nTile : bufferOffset + (k+1) * nTile]
         for (unsigned j = 0; j < nTile && j < arrayCols; j++) {
             uint64_t bValue;
-            std::memcpy(&bValue, bufWeights.data() + (k * nTile + j) * sizeof(uint64_t), sizeof(uint64_t));
+            uint64_t bufferIdx = bufferOffset + k * nTile + j;
+            std::memcpy(&bValue, bufWeights.data() + bufferIdx * sizeof(uint64_t), sizeof(uint64_t));
             
-            if (rowIdx == 0 && j < 4) {
-                std::cout << "  [DEBUG] k=" << k << ", A[0][" << k << "]=" << aValue 
-                          << ", B[" << k << "][" << j << "]=" << bValue;
-                std::cout << ", PE[0][" << j << "].accum_before=" << peArray[0][j].getResult();
-            }
+            // Debug output disabled for performance
+            // if (rowIdx == 0 && j < 4) {
+            //     std::cout << "  [DEBUG] k=" << k << ", A[0][" << k << "]=" << aValue 
+            //               << ", B[" << k << "][" << j << "]=" << bValue;
+            //     std::cout << ", PE[0][" << j << "].accum_before=" << peArray[0][j].getResult();
+            // }
             
             // PE[rowIdx][j] computes C[rowIdx][j]
             peArray[rowIdx][j].loadWeight(bValue);
             peArray[rowIdx][j].compute(aValue);
             
-            if (rowIdx == 0 && j < 4) {
-                std::cout << ", accum_after=" << peArray[0][j].getResult() << std::endl;
-            }
+            // if (rowIdx == 0 && j < 4) {
+            //     std::cout << ", accum_after=" << peArray[0][j].getResult() << std::endl;
+            // }
         }
     }
     
@@ -333,8 +353,8 @@ SystolicAccel::startCTileWrite()
     uint64_t mTile = getCurrentMTileSize();
     uint64_t nTile = getCurrentNTileSize();
     
-    std::cout << "[SystolicAccel] Writing results tile (" << tileI << "," << tileJ 
-              << "), size=" << mTile << "×" << nTile << std::endl;
+    // std::cout << "[SystolicAccel] Writing results tile (" << tileI << "," << tileJ 
+    //           << "), size=" << mTile << "×" << nTile << std::endl;
     
     // Collect results from PEs into buffer
     for (unsigned i = 0; i < mTile; i++) {
@@ -343,10 +363,10 @@ SystolicAccel::startCTileWrite()
             uint64_t idx = i * nTile + j;
             std::memcpy(bufCTile.data() + idx * sizeof(uint64_t), &result, sizeof(uint64_t));
             
-            if (i < 2 && j < 4) {
-                std::cout << "[WriteTile] PE[" << i << "][" << j << "]=" << result 
-                          << " -> bufCTile[" << idx << "]" << std::endl;
-            }
+            // if (i < 2 && j < 4) {
+            //     std::cout << "[WriteTile] PE[" << i << "][" << j << "]=" << result 
+            //               << " -> bufCTile[" << idx << "]" << std::endl;
+            // }
         }
     }
     
@@ -360,8 +380,8 @@ SystolicAccel::startCTileWrite()
     Addr addr = regMatC + (rowStart * regDimN + colStart) * sizeof(uint64_t);
     uint64_t rowSize = nTile * sizeof(uint64_t);
     
-    std::cout << "[WriteTile] Writing row " << writeRowIdx << " to addr=0x" 
-              << std::hex << addr << std::dec << ", size=" << rowSize << " bytes" << std::endl;
+    // std::cout << "[WriteTile] Writing row " << writeRowIdx << " to addr=0x" 
+    //           << std::hex << rowAddr << std::dec << ", size=" << writeSize << " bytes" << std::endl;
     
     auto cb = new DmaVirtCallback<uint64_t>(
         [this](const uint64_t &) { onCTileWriteDone(); });
@@ -385,8 +405,8 @@ SystolicAccel::onCTileWriteDone()
         Addr addr = regMatC + (rowStart * regDimN + colStart) * sizeof(uint64_t);
         uint64_t rowSize = nTile * sizeof(uint64_t);
         
-        std::cout << "[WriteTile] Writing row " << writeRowIdx << " to addr=0x" 
-                  << std::hex << addr << std::dec << ", size=" << rowSize << " bytes" << std::endl;
+        // std::cout << "[WriteTile] Writing row " << writeRowIdx << " to addr=0x" 
+        //           << std::hex << rowAddr << std::dec << ", size=" << writeSize << " bytes" << std::endl;
         
         auto cb = new DmaVirtCallback<uint64_t>(
             [this](const uint64_t &) { onCTileWriteDone(); });
@@ -394,7 +414,7 @@ SystolicAccel::onCTileWriteDone()
         dmaWriteVirt(addr, rowSize, cb, bufCTile.data() + writeRowIdx * nTile * sizeof(uint64_t));
     } else {
         // All rows written
-        std::cout << "[WriteTile] DMA write completed for tile (" << tileI << "," << tileJ << ")" << std::endl;
+        // std::cout << "[WriteTile] DMA write completed for tile (" << tileI << "," << tileJ << ")" << std::endl;
         nextTile();
     }
 }

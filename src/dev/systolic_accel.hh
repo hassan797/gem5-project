@@ -76,6 +76,7 @@ class SystolicAccel : public DmaVirtDevice
     // Systolic array dimensions
     const unsigned arrayRows;    // Number of PE rows (M dimension)
     const unsigned arrayCols;    // Number of PE columns (N dimension)
+    const unsigned kTileBatch;   // Number of K-tiles to batch per DMA load
     
     // Timing parameters
     Tick macLatency;  // Latency for one MAC operation across all PEs
@@ -109,6 +110,11 @@ class SystolicAccel : public DmaVirtDevice
     uint64_t tileI;        // Current M tile
     uint64_t tileJ;        // Current N tile
     uint64_t tileK;        // Current K tile (for accumulation)
+    
+    // K-tile batching
+    uint64_t kBatchStart;  // Starting K-tile for current batch
+    uint64_t kBatchSize;   // Number of K-tiles in current batch
+    uint64_t kBatchOffset; // Offset within current batch (0 to kBatchSize-1)
     
     // Within-tile indices
     uint64_t rowIdx;       // Current row being processed in tile
